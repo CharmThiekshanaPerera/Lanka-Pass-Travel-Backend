@@ -313,8 +313,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 @app.get("/api/admin/dashboard", dependencies=[Depends(require_staff)])
 async def get_admin_dashboard():
     try:
-        vendors = supabase.table("vendors").select("status").execute()
-        users = supabase.table("users").select("role").execute()
+        # Use ADMIN client to ensure we see all data regardless of RLS pollution
+        vendors = supabase_admin.table("vendors").select("status").execute()
+        users = supabase_admin.table("users").select("role").execute()
         return {
             "stats": {
                 "total_vendors": len(vendors.data or []),
@@ -328,18 +329,22 @@ async def get_admin_dashboard():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/vendors", dependencies=[Depends(require_staff)])
-async def get_all_vendors():
+async def get_vendors_admin(status: Optional[str] = None):
     try:
-        vendors = supabase.table("vendors").select("*").execute()
-        return {"success": True, "vendors": vendors.data or []}
+        query = supabase_admin.table("vendors").select("*")
+        if status:
+            query = query.eq("status", status)
+        res = query.order("created_at", desc=True).execute()
+        return {"success": True, "vendors": res.data or []}
     except Exception as e:
+        logger.error(f"Fetch vendors admin error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_staff)])
 async def get_vendor_detail(vendor_id: str):
     try:
-        vendor_res = supabase.table("vendors").select("*").eq("id", vendor_id).single().execute()
-        services_res = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+        vendor_res = supabase_admin.table("vendors").select("*").eq("id", vendor_id).single().execute()
+        services_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
         return {
             "success": True,
             "vendor": vendor_res.data,
@@ -403,7 +408,7 @@ async def update_service_commission(service_id: str, data: CommissionUpdateReque
 @app.get("/api/admin/managers", dependencies=[Depends(require_admin)])
 async def get_managers():
     try:
-        users = supabase.table("users").select("*").eq("role", "manager").execute()
+        users = supabase_admin.table("users").select("*").eq("role", "manager").execute()
         return {"success": True, "managers": users.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -499,7 +504,7 @@ async def upload_file(
         content = await file.read()
         
         try:
-            supabase.storage.from_(bucket_name).upload(
+            supabase_admin.storage.from_(bucket_name).upload(
                 path=file_name,
                 file=content,
                 file_options={"content-type": file.content_type}
@@ -521,21 +526,21 @@ async def upload_file(
             elif file_type == "nic_passport": update_data["nic_passport_url"] = public_url
             elif file_type == "tourism_license": update_data["tourism_license_url"] = public_url
             elif file_type == "gallery":
-                current_vendor = supabase.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
+                current_vendor = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
                 urls = current_vendor.data.get("gallery_urls") or []
                 urls.append(public_url)
                 update_data["gallery_urls"] = urls
             elif file_type.startswith("service_") and service_index is not None:
                 idx = int(service_index)
-                srv_res = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+                srv_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
                 if srv_res.data and len(srv_res.data) > idx:
                     tid = srv_res.data[idx]["id"]
                     imgs = srv_res.data[idx].get("image_urls") or []
                     imgs.append(public_url)
-                    supabase.table("vendor_services").update({"image_urls": imgs}).eq("id", tid).execute()
+                    supabase_admin.table("vendor_services").update({"image_urls": imgs}).eq("id", tid).execute()
             
             if update_data:
-                supabase.table("vendors").update(update_data).eq("id", vendor_id).execute()
+                supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
         except Exception as db_err:
             logger.error(f"DB update failed for file: {str(db_err)}")
         
@@ -642,7 +647,7 @@ async def register_vendor(data: VendorRegisterRequest):
                     "languages_offered": s.languagesOffered,
                     "group_size_min": s.groupSizeMin,
                     "group_size_max": s.groupSizeMax,
-                    "daily_capacity": s.daily_capacity,
+                    "daily_capacity": s.dailyCapacity, # Fixed Typo
                     "operating_days": s.operatingDays,
                     "locations_covered": s.locationsCovered,
                     "currency": s.currency,
@@ -662,7 +667,9 @@ async def register_vendor(data: VendorRegisterRequest):
                 }
                 supabase_admin.table("vendor_services").insert(db_service).execute()
             except Exception as se:
-                logger.error(f"Service insert error: {str(se)}")
+                logger.error(f"Service insert error for {s.serviceName}: {str(se)}")
+                # Re-raise to ensure we don't return success if services fail
+                raise HTTPException(status_code=500, detail=f"Service registration failed for {s.serviceName}: {str(se)}")
                 
         return {"success": True, "vendor_id": vendor_id}
     except HTTPException: raise
@@ -675,26 +682,21 @@ async def get_vendor_profile(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "vendor":
         raise HTTPException(status_code=403, detail="Vendor access required")
     try:
-        vendor_res = supabase.table("vendors").select("*").eq("user_id", current_user["id"]).single().execute()
+        # Use ADMIN client to bypass RLS issues for the authorized user
+        vendor_res = supabase_admin.table("vendors").select("*").eq("user_id", current_user["id"]).single().execute()
         if not vendor_res.data: raise HTTPException(status_code=404, detail="Vendor profile not found")
         v_id = vendor_res.data["id"]
-        s_res = supabase.table("vendor_services").select("*").eq("vendor_id", v_id).execute()
+        s_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", v_id).execute()
         return {"success": True, "vendor": vendor_res.data, "services": s_res.data or []}
     except Exception as e:
+        logger.error(f"Get vendor profile error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/vendor/stats")
 async def get_vendor_stats(current_user: dict = Depends(get_current_user)):
     return {"success": True, "stats": {"total_bookings": 0, "pending_bookings": 0, "total_earnings": 0, "active_services": 0}}
 
-@app.get("/api/admin/vendors")
-async def get_vendors(current_user: dict = Depends(require_admin)):
-    try:
-        res = supabase.table("vendors").select("*").order("created_at", desc=True).execute()
-        return {"success": True, "vendors": res.data}
-    except Exception as e:
-        logger.error(f"Fetch vendors error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Removed redundant get_vendors endpoint
 
 if __name__ == "__main__":
     import uvicorn
