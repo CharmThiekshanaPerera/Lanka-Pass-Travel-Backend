@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
+# DEDICATED ADMIN CLIENT to avoid session pollution from auth.sign_in calls
+supabase_admin: Client = create_client(supabase_url, supabase_key)
 
 # Initialize FastAPI
 app = FastAPI(title="Vendor Registration API")
@@ -170,7 +172,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
             # This helps if previous test runs failed halfway
             logger.info(f"Checking if user exists in Supabase Auth: {vendor_data.email}")
             try:
-                auth_list_res = supabase.auth.admin.list_users()
+                auth_list_res = supabase_admin.auth.admin.list_users()
                 # Handle different return formats (list vs object with .users)
                 users_to_check = auth_list_res.users if hasattr(auth_list_res, 'users') else auth_list_res
                 
@@ -198,7 +200,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
                 logger.info(f"Creating auth user via Admin API for: {admin_user_params['email']}")
                 
                 try:
-                    auth_response = supabase.auth.admin.create_user(admin_user_params)
+                    auth_response = supabase_admin.auth.admin.create_user(admin_user_params)
                     if not auth_response.user:
                         raise Exception("Auth user creation returned no user object")
                     user_id = auth_response.user.id

@@ -1,42 +1,30 @@
-"""
-Verify if Service Role Key works for Admin API
-"""
 import os
-from supabase import create_client, Client
 from dotenv import load_dotenv
-import time
+from supabase import create_client
 
 load_dotenv()
 
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
 
+print(f"Testing Supabase Admin API")
 print(f"URL: {url}")
-print(f"Key: {key[:10]}...")
+print(f"Key starts with: {key[:15]}...")
 
-supabase: Client = create_client(url, key)
-
-email = f"admin_api_test_{int(time.time())}@test.com"
-password = "TestPassword123!"
-
-print(f"\nAttempting admin.create_user for {email}...")
+supabase = create_client(url, key)
 
 try:
-    res = supabase.auth.admin.create_user({
-        "email": email,
-        "password": password,
-        "email_confirm": True,
-        "user_metadata": {"role": "vendor"}
-    })
-    print("✓ SUCCESS!")
-    print(f"User ID: {res.user.id}")
-    
-    # Cleanup
-    supabase.auth.admin.delete_user(res.user.id)
-    print("✓ Cleanup successful")
-    
+    # Try to list users (requires service role)
+    print("Attempting to list users via admin API...")
+    users = supabase.auth.admin.list_users()
+    print(f"SUCCESS: Found {len(users)} users.")
 except Exception as e:
-    print("❌ FAILED")
-    print(f"Error: {e}")
-    # Print type of error
-    print(f"Type: {type(e)}")
+    print(f"FAILED to list users: {e}")
+
+try:
+    # Try a simple select
+    print("Attempting to select from public.users...")
+    res = supabase.table("users").select("count", count="exact").execute()
+    print(f"SUCCESS: Selection worked. Count: {res.count}")
+except Exception as e:
+    print(f"FAILED to select: {e}")

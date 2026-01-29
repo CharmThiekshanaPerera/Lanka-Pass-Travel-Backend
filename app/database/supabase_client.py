@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class SupabaseManager:
     _instance: Optional[Client] = None
+    _admin_instance: Optional[Client] = None
     
     @classmethod
     def get_client(cls) -> Client:
@@ -23,6 +24,23 @@ class SupabaseManager:
                 logger.error(f"❌ Failed to initialize Supabase client: {e}")
                 raise
         return cls._instance
+    
+    @classmethod
+    def get_admin_client(cls) -> Client:
+        """Returns a fixed Supabase client for admin operations to avoid session pollution.
+        This instance should NEVER be used for supabase.auth.sign_in() operations.
+        """
+        if cls._admin_instance is None:
+            try:
+                cls._admin_instance = create_client(
+                    settings.SUPABASE_URL,
+                    settings.SUPABASE_KEY
+                )
+                logger.info("✅ Supabase ADMIN client initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize Supabase admin client: {e}")
+                raise
+        return cls._admin_instance
     
     @classmethod
     async def execute_query(cls, table: str, operation: str, **kwargs) -> Dict[str, Any]:
