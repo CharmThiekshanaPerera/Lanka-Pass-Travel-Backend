@@ -189,7 +189,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
                 # Use password provided in request
                 admin_user_params = {
                     "email": str(vendor_data.email),
-                    "password": vendor_data.password,
+                    "password": vendor_data.password if vendor_data.password else "123456",
                     "email_confirm": True,
                     "user_metadata": {
                         "name": vendor_data.contactPerson,

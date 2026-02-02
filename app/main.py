@@ -16,6 +16,8 @@ load_dotenv()
 
 from supabase import create_client, Client
 import logging
+from app.services.sms_service import SmsService
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -114,6 +116,13 @@ class ManagerCreateRequest(BaseModel):
     password: str
     name: str
 
+class SendOtpRequest(BaseModel):
+    phoneNumber: str
+
+class VerifyOtpRequest(BaseModel):
+    phoneNumber: str
+    otpCode: str
+
 class VendorStatusRequest(BaseModel):
     status: str
     status_reason: Optional[str] = None
@@ -149,7 +158,7 @@ class ServiceSchema(BaseModel):
 
 class VendorRegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: Optional[str] = "123456"
     contactPerson: str
     vendorType: Optional[str] = None
     vendorTypeOther: Optional[str] = None
@@ -185,6 +194,51 @@ class VendorRegisterRequest(BaseModel):
     payoutDate: Optional[str] = None
     # Services
     services: List[ServiceSchema] = []
+
+class VendorUpdateSchema(BaseModel):
+    businessName: Optional[str] = None
+    legalName: Optional[str] = None
+    contactPerson: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    operatingAreas: Optional[List[str]] = None
+    operatingAreasOther: Optional[str] = None
+    vendorType: Optional[str] = None
+    vendorTypeOther: Optional[str] = None
+    businessAddress: Optional[str] = None
+    businessRegNumber: Optional[str] = None
+    taxId: Optional[str] = None
+    bankName: Optional[str] = None
+    bankNameOther: Optional[str] = None
+    accountHolderName: Optional[str] = None
+    accountNumber: Optional[str] = None
+    bankBranch: Optional[str] = None
+    payoutCycle: Optional[str] = None
+    payoutDate: Optional[str] = None
+
+# OTP Endpoints
+@app.post("/api/auth/send-otp")
+async def send_otp(data: SendOtpRequest):
+    try:
+        success = await SmsService.send_otp(data.phoneNumber)
+        if success:
+            return {"success": True, "message": "OTP sent successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send OTP")
+    except Exception as e:
+        logger.error(f"Send OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/verify-otp")
+async def verify_otp(data: VerifyOtpRequest):
+    try:
+        is_valid = await SmsService.verify_otp(data.phoneNumber, data.otpCode)
+        if is_valid:
+            return {"success": True, "message": "OTP verified successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+    except Exception as e:
+        logger.error(f"Verify OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Auth API
 @app.post("/api/auth/login")
@@ -558,10 +612,13 @@ async def register_vendor(data: VendorRegisterRequest):
         logger.info(f"Vendor registration: {data.email}")
         
         # 1. Auth User - Use ADMIN client
+        # Default password to '123456' if not provided
+        password = data.password if data.password else "123456"
+        
         try:
             auth_res = supabase_admin.auth.admin.create_user({
                 "email": str(data.email),
-                "password": data.password,
+                "password": password,
                 "email_confirm": True,
                 "user_metadata": {"role": "vendor", "name": data.contactPerson}
             })
@@ -695,6 +752,62 @@ async def get_vendor_profile(current_user: dict = Depends(get_current_user)):
 @app.get("/api/vendor/stats")
 async def get_vendor_stats(current_user: dict = Depends(get_current_user)):
     return {"success": True, "stats": {"total_bookings": 0, "pending_bookings": 0, "total_earnings": 0, "active_services": 0}}
+
+@app.put("/api/vendor/profile")
+async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    try:
+        # Get vendor ID first
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        vendor_id = vendor_res.data["id"]
+        
+        # Prepare update data (only non-None fields)
+        update_data = {}
+        field_map = {
+            "businessName": "business_name",
+            "legalName": "legal_name",
+            "contactPerson": "contact_person",
+            "phoneNumber": "phone_number",
+            "operatingAreas": "operating_areas",
+            "operatingAreasOther": "operating_areas_other",
+            "vendorType": "vendor_type",
+            "vendorTypeOther": "vendor_type_other",
+            "businessAddress": "business_address",
+            "businessRegNumber": "business_reg_number",
+            "taxId": "tax_id",
+            "bankName": "bank_name",
+            "bankNameOther": "bank_name_other",
+            "accountHolderName": "account_holder_name",
+            "accountNumber": "account_number",
+            "bankBranch": "bank_branch",
+            "payoutCycle": "payout_cycle",
+            "payoutDate": "payout_date"
+        }
+        
+        for pydantic_field, db_field in field_map.items():
+            val = getattr(data, pydantic_field)
+            if val is not None:
+                update_data[db_field] = val
+        
+        if update_data:
+            res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+            
+            # Also update name in users table if contactPerson changed
+            if "contact_person" in update_data:
+                supabase_admin.table("users").update({"name": update_data["contact_person"]}).eq("id", current_user["id"]).execute()
+            
+            return {"success": True, "vendor": res.data[0]}
+        
+        return {"success": True, "message": "No changes requested"}
+        
+    except Exception as e:
+        logger.error(f"Update vendor profile error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Removed redundant get_vendors endpoint
 
