@@ -102,6 +102,43 @@ async def require_admin(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
+async def require_vendor(user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    return user
+
+async def upload_file_to_storage(file: UploadFile, vendor_id: str, file_type: str, service_id: Optional[str] = None):
+    """Upload file to Supabase Storage"""
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Generate unique filename
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'bin'
+        unique_filename = f"{uuid.uuid4()}.{file_ext}"
+        
+        # Determine file path
+        if service_id:
+            file_path = f"vendors/{vendor_id}/services/{service_id}/{unique_filename}"
+        else:
+            file_path = f"vendors/{vendor_id}/{file_type}/{unique_filename}"
+        
+        # Upload to storage
+        result = supabase_admin.storage.from_("vendor-files").upload(
+            file_path,
+            content,
+            {"content-type": file.content_type}
+        )
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_("vendor-files").get_public_url(file_path)
+        
+        return public_url
+        
+    except Exception as e:
+        logger.error(f"File upload error: {str(e)}")
+        raise e
+
 async def require_staff(user: dict = Depends(get_current_user)):
     """Allow both admin and manager roles"""
     if user.get("role") not in ["admin", "manager"]:
@@ -143,6 +180,7 @@ class VendorStatusRequest(BaseModel):
 class ServiceSchema(BaseModel):
     serviceName: str
     serviceCategory: str
+    serviceCategoryOther: Optional[str] = None
     serviceDescription: Optional[str] = None
     description: Optional[str] = None
     shortDescription: Optional[str] = None
@@ -151,6 +189,7 @@ class ServiceSchema(BaseModel):
     durationValue: Optional[int] = None
     durationUnit: Optional[str] = None
     languagesOffered: Optional[List[str]] = []
+    languagesOther: Optional[str] = None
     groupSizeMin: Optional[int] = None
     groupSizeMax: Optional[int] = None
     dailyCapacity: Optional[int] = None
@@ -160,14 +199,21 @@ class ServiceSchema(BaseModel):
     retailPrice: float
     # New fields
     operatingHoursFrom: Optional[str] = None
+    operatingHoursFromPeriod: Optional[str] = "AM"
     operatingHoursTo: Optional[str] = None
+    operatingHoursToPeriod: Optional[str] = "PM"
     blackoutDates: Optional[List[str]] = []
     blackoutHolidays: Optional[bool] = False
+    blackoutWeekends: Optional[bool] = False
+    advanceBooking: Optional[str] = None
+    advanceBookingOther: Optional[str] = None
     notSuitableFor: Optional[str] = None
     importantInfo: Optional[str] = None
     cancellationPolicy: Optional[str] = None
     accessibilityInfo: Optional[str] = None
     imageUrls: Optional[List[str]] = []
+    serviceTimeSlots: Optional[List[Dict[str, Any]]] = []
+    status: Optional[str] = "active"
 
 class VendorRegisterRequest(BaseModel):
     email: EmailStr
@@ -227,6 +273,9 @@ class VendorUpdateSchema(BaseModel):
     bankBranch: Optional[str] = None
     payoutCycle: Optional[str] = None
     payoutDate: Optional[str] = None
+    regCertificateUrl: Optional[str] = None
+    nicPassportUrl: Optional[str] = None
+    tourismLicenseUrl: Optional[str] = None
 
 # Chat and Update Request Models
 class ChatMessageSchema(BaseModel):
@@ -603,6 +652,7 @@ async def upload_file(
             elif file_type == "reg_certificate": update_data["reg_certificate_url"] = public_url
             elif file_type == "nic_passport": update_data["nic_passport_url"] = public_url
             elif file_type == "tourism_license": update_data["tourism_license_url"] = public_url
+            elif file_type == "promo_video": update_data["promo_video_url"] = public_url
             elif file_type == "gallery":
                 current_vendor = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
                 urls = current_vendor.data.get("gallery_urls") or []
@@ -618,7 +668,13 @@ async def upload_file(
                     supabase_admin.table("vendor_services").update({"image_urls": imgs}).eq("id", tid).execute()
             
             if update_data:
-                supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+                # Only update metadata directly but NOT profile documents that need approval
+                # (regCertificateUrl, nicPassportUrl, tourismLicenseUrl are now handled via update request)
+                # logo and cover_image can still be updated directly
+                allowed_direct_updates = ["logo_url", "cover_image_url", "gallery_urls", "promo_video_url"]
+                direct_data = {k: v for k, v in update_data.items() if k in allowed_direct_updates}
+                if direct_data:
+                    supabase_admin.table("vendors").update(direct_data).eq("id", vendor_id).execute()
         except Exception as db_err:
             logger.error(f"DB update failed for file: {str(db_err)}")
         
@@ -632,6 +688,7 @@ async def upload_file(
 @app.post("/api/vendor/register", status_code=201)
 async def register_vendor(data: VendorRegisterRequest):
     user_id = None
+    vendor_id = None
     try:
         logger.info(f"Vendor registration: {data.email}")
         
@@ -647,6 +704,7 @@ async def register_vendor(data: VendorRegisterRequest):
                 "user_metadata": {"role": "vendor", "name": data.contactPerson}
             })
             user_id = auth_res.user.id
+            logger.info(f"Auth user created: {user_id}")
         except Exception as e:
             logger.error(f"Auth creation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Auth creation failed: {str(e)}")
@@ -659,9 +717,15 @@ async def register_vendor(data: VendorRegisterRequest):
                 "name": data.contactPerson,
                 "role": "vendor"
             }).execute()
+            logger.info(f"User profile created: {user_id}")
         except Exception as e:
             logger.error(f"Profile creation failed: {str(e)}")
-            supabase_admin.auth.admin.delete_user(user_id)
+            # Rollback: Delete auth user
+            try:
+                supabase_admin.auth.admin.delete_user(user_id)
+                logger.info(f"Rolled back auth user: {user_id}")
+            except Exception as rollback_err:
+                logger.error(f"Rollback failed for auth user: {rollback_err}")
             raise HTTPException(status_code=500, detail=f"User profile failed: {str(e)}")
         
         # 3. Vendor Profile
@@ -706,10 +770,20 @@ async def register_vendor(data: VendorRegisterRequest):
             }
             res = supabase_admin.table("vendors").insert(db_vendor).execute()
             vendor_id = res.data[0]["id"]
+            logger.info(f"Vendor profile created: {vendor_id}")
         except Exception as e:
             logger.error(f"Vendor profile error: {str(e)}")
-            supabase_admin.table("users").delete().eq("id", user_id).execute()
-            supabase_admin.auth.admin.delete_user(user_id)
+            # Rollback: Delete user and auth
+            try:
+                supabase_admin.table("users").delete().eq("id", user_id).execute()
+                logger.info(f"Rolled back user profile: {user_id}")
+            except Exception as rollback_err:
+                logger.error(f"Rollback failed for user profile: {rollback_err}")
+            try:
+                supabase_admin.auth.admin.delete_user(user_id)
+                logger.info(f"Rolled back auth user: {user_id}")
+            except Exception as rollback_err:
+                logger.error(f"Rollback failed for auth user: {rollback_err}")
             raise HTTPException(status_code=500, detail=f"Vendor profile failed: {str(e)}")
         
         # 4. Services
@@ -719,6 +793,7 @@ async def register_vendor(data: VendorRegisterRequest):
                     "vendor_id": vendor_id,
                     "service_name": s.serviceName,
                     "service_category": s.serviceCategory,
+                    "service_category_other": s.serviceCategoryOther,
                     "service_description": s.serviceDescription or s.description,
                     "short_description": s.shortDescription,
                     "whats_included": s.whatsIncluded,
@@ -726,9 +801,10 @@ async def register_vendor(data: VendorRegisterRequest):
                     "duration_value": s.durationValue,
                     "duration_unit": s.durationUnit,
                     "languages_offered": s.languagesOffered,
+                    "languages_other": s.languagesOther,
                     "group_size_min": s.groupSizeMin,
                     "group_size_max": s.groupSizeMax,
-                    "daily_capacity": s.dailyCapacity, # Fixed Typo
+                    "daily_capacity": s.dailyCapacity,
                     "operating_days": s.operatingDays,
                     "locations_covered": s.locationsCovered,
                     "currency": s.currency,
@@ -737,9 +813,14 @@ async def register_vendor(data: VendorRegisterRequest):
                     "net_price": s.retailPrice,
                     # New fields
                     "operating_hours_from": s.operatingHoursFrom,
+                    "operating_hours_from_period": s.operatingHoursFromPeriod,
                     "operating_hours_to": s.operatingHoursTo,
+                    "operating_hours_to_period": s.operatingHoursToPeriod,
                     "blackout_dates": s.blackoutDates,
                     "blackout_holidays": s.blackoutHolidays,
+                    "blackout_weekends": s.blackoutWeekends,
+                    "advance_booking": s.advanceBooking,
+                    "advance_booking_other": s.advanceBookingOther,
                     "not_suitable_for": s.notSuitableFor,
                     "important_info": s.importantInfo,
                     "cancellation_policy": s.cancellationPolicy,
@@ -747,15 +828,47 @@ async def register_vendor(data: VendorRegisterRequest):
                     "image_urls": s.imageUrls
                 }
                 supabase_admin.table("vendor_services").insert(db_service).execute()
+                logger.info(f"Service created: {s.serviceName}")
             except Exception as se:
                 logger.error(f"Service insert error for {s.serviceName}: {str(se)}")
-                # Re-raise to ensure we don't return success if services fail
+                # Rollback: Delete vendor, user, and auth
+                try:
+                    supabase_admin.table("vendors").delete().eq("id", vendor_id).execute()
+                    logger.info(f"Rolled back vendor profile: {vendor_id}")
+                except Exception as rollback_err:
+                    logger.error(f"Rollback failed for vendor: {rollback_err}")
+                try:
+                    supabase_admin.table("users").delete().eq("id", user_id).execute()
+                    logger.info(f"Rolled back user profile: {user_id}")
+                except Exception as rollback_err:
+                    logger.error(f"Rollback failed for user: {rollback_err}")
+                try:
+                    supabase_admin.auth.admin.delete_user(user_id)
+                    logger.info(f"Rolled back auth user: {user_id}")
+                except Exception as rollback_err:
+                    logger.error(f"Rollback failed for auth: {rollback_err}")
                 raise HTTPException(status_code=500, detail=f"Service registration failed for {s.serviceName}: {str(se)}")
                 
+        logger.info(f"Vendor registration completed successfully: {vendor_id}")
         return {"success": True, "vendor_id": vendor_id}
     except HTTPException: raise
     except Exception as e:
         logger.exception("Vendor registration exception")
+        # Final catch-all rollback if we have IDs
+        if vendor_id:
+            try:
+                supabase_admin.table("vendors").delete().eq("id", vendor_id).execute()
+                logger.info(f"Final rollback - vendor: {vendor_id}")
+            except: pass
+        if user_id:
+            try:
+                supabase_admin.table("users").delete().eq("id", user_id).execute()
+                logger.info(f"Final rollback - user: {user_id}")
+            except: pass
+            try:
+                supabase_admin.auth.admin.delete_user(user_id)
+                logger.info(f"Final rollback - auth: {user_id}")
+            except: pass
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/vendor/profile")
@@ -814,7 +927,10 @@ async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = D
             "accountNumber": "account_number",
             "bankBranch": "bank_branch",
             "payoutCycle": "payout_cycle",
-            "payoutDate": "payout_date"
+            "payoutDate": "payout_date",
+            "regCertificateUrl": "reg_certificate_url",
+            "nicPassportUrl": "nic_passport_url",
+            "tourismLicenseUrl": "tourism_license_url"
         }
         
         # Prepare update data (only changed fields)
@@ -866,6 +982,270 @@ async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = D
     except Exception as e:
         logger.error(f"Update vendor profile error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== SERVICE MANAGEMENT ENDPOINTS ====================
+
+@app.post("/api/vendor/services", status_code=201)
+async def create_vendor_service(s: ServiceSchema, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    try:
+        # Get vendor ID first
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        vendor_id = vendor_res.data["id"]
+        
+        db_service = {
+            "vendor_id": vendor_id,
+            "service_name": s.serviceName,
+            "service_category": s.serviceCategory,
+            "service_category_other": s.serviceCategoryOther,
+            "service_description": s.serviceDescription or s.description,
+            "short_description": s.shortDescription,
+            "whats_included": s.whatsIncluded,
+            "whats_not_included": s.whatsNotIncluded,
+            "duration_value": s.durationValue,
+            "duration_unit": s.durationUnit,
+            "languages_offered": s.languagesOffered,
+            "languages_other": s.languagesOther,
+            "group_size_min": s.groupSizeMin,
+            "group_size_max": s.groupSizeMax,
+            "daily_capacity": s.dailyCapacity,
+            "operating_days": s.operatingDays,
+            "locations_covered": s.locationsCovered,
+            "currency": s.currency,
+            "retail_price": s.retailPrice,
+            "commission": 0,
+            "net_price": s.retailPrice,
+            "operating_hours_from": s.operatingHoursFrom,
+            "operating_hours_from_period": s.operatingHoursFromPeriod,
+            "operating_hours_to": s.operatingHoursTo,
+            "operating_hours_to_period": s.operatingHoursToPeriod,
+            "blackout_dates": s.blackoutDates,
+            "blackout_holidays": s.blackoutHolidays,
+            "blackout_weekends": s.blackoutWeekends,
+            "advance_booking": s.advanceBooking,
+            "advance_booking_other": s.advanceBookingOther,
+            "not_suitable_for": s.notSuitableFor,
+            "important_info": s.importantInfo,
+            "cancellation_policy": s.cancellationPolicy,
+            "accessibility_info": s.accessibilityInfo,
+            "image_urls": s.imageUrls or [],
+            "service_time_slots": s.serviceTimeSlots or []
+        }
+        
+        res = supabase_admin.table("vendor_services").insert(db_service).execute()
+        return {"success": True, "service": res.data[0]}
+        
+    except Exception as e:
+        logger.error(f"Create service error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/vendor/services/{service_id}")
+async def update_vendor_service(service_id: str, s: ServiceSchema, current_user: dict = Depends(get_current_user)):
+    """
+    Update vendor service - Creates an approval request for non-media changes.
+    Media field updates (imageUrls) apply directly without approval.
+    """
+    if current_user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    try:
+        # Verify ownership
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        vendor_id = vendor_res.data["id"]
+        
+        # Get current service data
+        service_res = supabase_admin.table("vendor_services").select("*").eq("id", service_id).eq("vendor_id", vendor_id).single().execute()
+        if not service_res.data:
+            raise HTTPException(status_code=404, detail="Service not found or access denied")
+        
+        current_service_data = service_res.data
+        
+        # Field mapping from pydantic to database
+        field_map = {
+            "serviceName": "service_name",
+            "serviceCategory": "service_category",
+            "serviceCategoryOther": "service_category_other",
+            "serviceDescription": "service_description",
+            "shortDescription": "short_description",
+            "whatsIncluded": "whats_included",
+            "whatsNotIncluded": "whats_not_included",
+            "durationValue": "duration_value",
+            "durationUnit": "duration_unit",
+            "languagesOffered": "languages_offered",
+            "languagesOther": "languages_other",
+            "groupSizeMin": "group_size_min",
+            "groupSizeMax": "group_size_max",
+            "dailyCapacity": "daily_capacity",
+            "operatingDays": "operating_days",
+            "locationsCovered": "locations_covered",
+            "currency": "currency",
+            "retailPrice": "retail_price",
+            "operatingHoursFrom": "operating_hours_from",
+            "operatingHoursFromPeriod": "operating_hours_from_period",
+            "operatingHoursTo": "operating_hours_to",
+            "operatingHoursToPeriod": "operating_hours_to_period",
+            "blackoutDates": "blackout_dates",
+            "blackoutHolidays": "blackout_holidays",
+            "blackoutWeekends": "blackout_weekends",
+            "advanceBooking": "advance_booking",
+            "advanceBookingOther": "advance_booking_other",
+            "notSuitableFor": "not_suitable_for",
+            "importantInfo": "important_info",
+            "cancellationPolicy": "cancellation_policy",
+            "accessibilityInfo": "accessibility_info",
+            "serviceTimeSlots": "service_time_slots",
+            "imageUrls": "image_urls"  # Media field - can update directly
+        }
+        
+        # Separate media and non-media changes
+        media_fields = {"imageUrls"}
+        requested_data = {}
+        media_data = {}
+        current_data_snapshot = {}
+        changed_fields = []
+        
+        for pydantic_field, db_field in field_map.items():
+            val = getattr(s, pydantic_field)
+            if val is not None:
+                current_val = current_service_data.get(db_field)
+                # Only include if actually different
+                if val != current_val:
+                    if pydantic_field in media_fields:
+                        media_data[db_field] = val
+                    else:
+                        requested_data[db_field] = val
+                        current_data_snapshot[db_field] = current_val
+                        changed_fields.append(pydantic_field)
+        
+        # Apply media changes directly
+        if media_data:
+            supabase_admin.table("vendor_services").update(media_data).eq("id", service_id).execute()
+        
+        # If no non-media changes, return success
+        if not requested_data:
+            return {"success": True, "message": "No changes detected or media updated", "pending_approval": False}
+        
+        # Create update request in MongoDB for non-media changes
+        update_request = await chat_service.create_service_update_request(
+            vendor_id=vendor_id,
+            service_id=service_id,
+            requested_by=current_user["id"],
+            requested_by_name=current_user.get("name", current_user.get("email", "Vendor")),
+            current_data=current_data_snapshot,
+            requested_data=requested_data,
+            changed_fields=changed_fields
+        )
+        
+        if update_request:
+            return {
+                "success": True,
+                "message": "Your service update request has been submitted for approval. You will be notified once it is reviewed.",
+                "pending_approval": True,
+                "request_id": update_request.get("id"),
+                "changed_fields": changed_fields
+            }
+        else:
+            # MongoDB not available - fallback to direct update
+            logger.warning("MongoDB not available - falling back to direct service update")
+            res = supabase_admin.table("vendor_services").update(requested_data).eq("id", service_id).execute()
+            return {"success": True, "service": res.data[0], "pending_approval": False}
+        
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"Update service error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/vendor/services/{service_id}")
+async def delete_vendor_service(service_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    try:
+        # Verify ownership
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        vendor_id = vendor_res.data["id"]
+        
+        # Delete if belongs to vendor
+        res = supabase_admin.table("vendor_services").delete().eq("id", service_id).eq("vendor_id", vendor_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Service not found or access denied")
+            
+        return {"success": True, "message": "Service deleted successfully"}
+        
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"Delete service error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/vendor/upload-file")
+async def upload_vendor_file(
+    file: UploadFile = File(...),
+    file_type: str = Form(...),
+    service_id: Optional[str] = Form(None),
+    current_user: dict = Depends(require_vendor)
+):
+    """
+    Upload vendor files (documents, images, etc.)
+    """
+    try:
+        # Get vendor id
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        vendor_id = vendor_res.data["id"]
+        logger.info(f"Uploading file for vendor {vendor_id}, type: {file_type}")
+        
+        # Upload file to storage
+        public_url = await upload_file_to_storage(file, vendor_id, file_type, service_id)
+        
+        # Update vendor record with file URL if it's a profile/business field
+        if file_type in ['reg_certificate', 'nic_passport', 'tourism_license', 'logo', 'cover_image', 'business_reg_certificate']:
+            column_map = {
+                'reg_certificate': 'reg_certificate_url',
+                'business_reg_certificate': 'reg_certificate_url',
+                'nic_passport': 'nic_passport_url',
+                'tourism_license': 'tourism_license_url',
+                'logo': 'logo_url',
+                'cover_image': 'cover_image_url'
+            }
+            if file_type in column_map:
+                supabase_admin.table("vendors").update({column_map[file_type]: public_url}).eq("id", vendor_id).execute()
+        
+        elif file_type == 'gallery':
+            vendor_data = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
+            current_gallery = vendor_data.data.get("gallery_urls", []) if vendor_data.data else []
+            updated_gallery = current_gallery + [public_url]
+            supabase_admin.table("vendors").update({"gallery_urls": updated_gallery}).eq("id", vendor_id).execute()
+            
+        elif file_type == 'service_image' and service_id:
+            service_data = supabase_admin.table("vendor_services").select("image_urls").eq("id", service_id).single().execute()
+            if service_data.data:
+                current_images = service_data.data.get("image_urls", [])
+                updated_images = current_images + [public_url]
+                supabase_admin.table("vendor_services").update({"image_urls": updated_images}).eq("id", service_id).execute()
+        
+        return {
+            "success": True,
+            "url": public_url,
+            "message": f"File uploaded successfully: {file.filename}"
+        }
+        
+    except Exception as e:
+        logger.error(f"File upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
 
 # ==================== CHAT ENDPOINTS ====================

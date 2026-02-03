@@ -227,6 +227,66 @@ class ChatService:
             logger.error(f"Error creating update request: {str(e)}")
             return None
     
+    async def create_service_update_request(
+        self,
+        vendor_id: str,
+        service_id: str,
+        requested_by: str,
+        requested_by_name: str,
+        current_data: Dict[str, Any],
+        requested_data: Dict[str, Any],
+        changed_fields: List[str]
+    ) -> Optional[Dict]:
+        """Create a new service update request"""
+        try:
+            collection = await get_update_requests_collection()
+            if collection is None:
+                logger.error("MongoDB not available - cannot create service update request")
+                return None
+            
+            doc = {
+                "vendor_id": vendor_id,
+                "service_id": service_id,  # NEW: track which service
+                "requested_by": requested_by,
+                "requested_by_name": requested_by_name,
+                "request_type": "service_update",  # NEW: distinguish from profile updates
+                "current_data": current_data,
+                "requested_data": requested_data,
+                "changed_fields": changed_fields,
+                "status": "pending",
+                "reviewed_by": None,
+                "reviewed_by_name": None,
+                "review_reason": None,
+                "created_at": datetime.utcnow(),
+                "reviewed_at": None
+            }
+            
+            result = await collection.insert_one(doc)
+            doc["_id"] = str(result.inserted_id)
+            
+            logger.info(f"Service update request created: {result.inserted_id}")
+            
+            # Create a chat message about this update request
+            field_summary = ", ".join(changed_fields[:5])
+            if len(changed_fields) > 5:
+                field_summary += f" and {len(changed_fields) - 5} more"
+            
+            await self.create_message(
+                vendor_id=vendor_id,
+                sender="vendor",
+                sender_id=requested_by,
+                sender_name=requested_by_name,
+                message=f"📝 Service update request submitted.\n\nFields to update: {field_summary}\n\nPlease review and approve the changes.",
+                message_type="update_request",
+                update_request_id=str(result.inserted_id)
+            )
+            
+            return self._serialize_update_request(doc)
+            
+        except Exception as e:
+            logger.error(f"Error creating service update request: {str(e)}")
+            return None
+    
     async def get_pending_update_requests(
         self,
         vendor_id: Optional[str] = None,
@@ -278,39 +338,11 @@ class ChatService:
         reviewed_by: str,
         reviewed_by_name: str
     ) -> Optional[Dict]:
-        """Approve an update request"""
+        """Approve an update request (profile or service)"""
         try:
             collection = await get_update_requests_collection()
             if collection is None:
                 return None
-            
-            # Map of frontend field names to Supabase DB names
-            FIELD_MAPPING = {
-                "businessName": "business_name",
-                "legalName": "legal_name",
-                "contactPerson": "contact_person",
-                "phoneNumber": "phone_number",
-                "operatingAreas": "operating_areas",
-                "operatingAreasOther": "operating_areas_other",
-                "vendorType": "vendor_type",
-                "vendorTypeOther": "vendor_type_other",
-                "businessAddress": "business_address",
-                "businessRegNumber": "business_reg_number",
-                "taxId": "tax_id",
-                "bankName": "bank_name",
-                "bankNameOther": "bank_name_other",
-                "accountHolderName": "account_holder_name",
-                "accountNumber": "account_number",
-                "bankBranch": "bank_branch",
-                "payoutCycle": "payout_cycle",
-                "payoutDate": "payout_date",
-                "regCertificateUrl": "reg_certificate_url",
-                "nicPassportUrl": "nic_passport_url",
-                "tourismLicenseUrl": "tourism_license_url",
-                "logoUrl": "logo_url",
-                "coverImageUrl": "cover_image_url",
-                "galleryUrls": "gallery_urls"
-            }
             
             # Update the request status
             result = await collection.find_one_and_update(
@@ -327,40 +359,93 @@ class ChatService:
             )
             
             if result:
-                # Apply changes to Supabase
+                request_type = result.get("request_type", "profile_update")
                 vendor_id = result["vendor_id"]
                 requested_data = result["requested_data"]
                 
-                # Transform data to snake_case for DB
-                db_data = {}
-                for key, value in requested_data.items():
-                    if key in FIELD_MAPPING:
-                        db_data[FIELD_MAPPING[key]] = value
-                    else:
-                        db_data[key] = value # Fallback
-                
-                if db_data:
-                    db_res = await SupabaseManager.execute_query(
-                        table="vendors",
-                        operation="update",
-                        data=db_data,
-                        filters={"id": vendor_id}
-                    )
+                # Handle based on request type
+                if request_type == "service_update":
+                    # Apply changes to vendor_services table
+                    service_id = result.get("service_id")
+                    if service_id and requested_data:
+                        db_res = await SupabaseManager.execute_query(
+                            table="vendor_services",
+                            operation="update",
+                            data=requested_data,
+                            filters={"id": service_id}
+                        )
+                        
+                        if not db_res["success"]:
+                            logger.error(f"Failed to update service: {db_res['error']}")
                     
-                    if not db_res["success"]:
-                        logger.error(f"Failed to update Supabase vendor profile: {db_res['error']}")
-                        # We still marked it as approved in Mongo, but logged the error
-                
-                # Create a system message about approval
-                await self.create_message(
-                    vendor_id=result["vendor_id"],
-                    sender="admin",
-                    sender_id=reviewed_by,
-                    sender_name=reviewed_by_name,
-                    message=f"✅ Your profile update request has been **approved** by {reviewed_by_name}.\n\nYour profile has been updated successfully.",
-                    message_type="system",
-                    update_request_id=request_id
-                )
+                    # Create a system message about approval
+                    await self.create_message(
+                        vendor_id=vendor_id,
+                        sender="admin",
+                        sender_id=reviewed_by,
+                        sender_name=reviewed_by_name,
+                        message=f"✅ Your service update request has been **approved** by {reviewed_by_name}.\n\nYour service has been updated successfully.",
+                        message_type="system",
+                        update_request_id=request_id
+                    )
+                else:
+                    # Profile update - use existing field mapping
+                    FIELD_MAPPING = {
+                        "businessName": "business_name",
+                        "legalName": "legal_name",
+                        "contactPerson": "contact_person",
+                        "phoneNumber": "phone_number",
+                        "operatingAreas": "operating_areas",
+                        "operatingAreasOther": "operating_areas_other",
+                        "vendorType": "vendor_type",
+                        "vendorTypeOther": "vendor_type_other",
+                        "businessAddress": "business_address",
+                        "businessRegNumber": "business_reg_number",
+                        "taxId": "tax_id",
+                        "bankName": "bank_name",
+                        "bankNameOther": "bank_name_other",
+                        "accountHolderName": "account_holder_name",
+                        "accountNumber": "account_number",
+                        "bankBranch": "bank_branch",
+                        "payoutCycle": "payout_cycle",
+                        "payoutDate": "payout_date",
+                        "regCertificateUrl": "reg_certificate_url",
+                        "nicPassportUrl": "nic_passport_url",
+                        "tourismLicenseUrl": "tourism_license_url",
+                        "logoUrl": "logo_url",
+                        "coverImageUrl": "cover_image_url",
+                        "galleryUrls": "gallery_urls"
+                    }
+                    
+                    # Transform data to snake_case for DB
+                    db_data = {}
+                    for key, value in requested_data.items():
+                        if key in FIELD_MAPPING:
+                            db_data[FIELD_MAPPING[key]] = value
+                        else:
+                            db_data[key] = value # Fallback
+                    
+                    if db_data:
+                        db_res = await SupabaseManager.execute_query(
+                            table="vendors",
+                            operation="update",
+                            data=db_data,
+                            filters={"id": vendor_id}
+                        )
+                        
+                        if not db_res["success"]:
+                            logger.error(f"Failed to update Supabase vendor profile: {db_res['error']}")
+                    
+                    # Create a system message about approval
+                    await self.create_message(
+                        vendor_id=vendor_id,
+                        sender="admin",
+                        sender_id=reviewed_by,
+                        sender_name=reviewed_by_name,
+                        message=f"✅ Your profile update request has been **approved** by {reviewed_by_name}.\n\nYour profile has been updated successfully.",
+                        message_type="system",
+                        update_request_id=request_id
+                    )
                 
                 return self._serialize_update_request(result)
 
@@ -471,6 +556,7 @@ class ChatService:
         return {
             "id": str(doc.get("_id", "")),
             "vendor_id": doc.get("vendor_id"),
+            "service_id": doc.get("service_id"),  # NEW: for service updates
             "requested_by": doc.get("requested_by"),
             "requested_by_name": doc.get("requested_by_name"),
             "request_type": doc.get("request_type"),
