@@ -17,6 +17,8 @@ load_dotenv()
 from supabase import create_client, Client
 import logging
 from app.services.sms_service import SmsService
+from app.services.chat_service import chat_service
+from app.database.mongo_config import ensure_indexes, close_mongo_connection
 
 
 # Setup logging
@@ -26,11 +28,6 @@ logger = logging.getLogger(__name__)
 # Initialize Supabase
 supabase_url = os.getenv("SUPABASE_URL", "").strip()
 supabase_key = os.getenv("SUPABASE_KEY", "").strip()
-print(f"BOOT: SUPABASE_URL={supabase_url}")
-if supabase_key:
-    print(f"BOOT: SUPABASE_KEY starts with: {supabase_key[:15]}...")
-else:
-    print("BOOT: SUPABASE_KEY is MISSING!")
 if not supabase_url or not supabase_key:
     logger.error("CRITICAL: SUPABASE_URL or SUPABASE_KEY not set!")
 
@@ -49,6 +46,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# MongoDB startup/shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MongoDB indexes on startup"""
+    try:
+        await ensure_indexes()
+        logger.info("MongoDB indexes ensured on startup")
+    except Exception as e:
+        logger.warning(f"MongoDB startup warning: {str(e)} - Chat features may be unavailable")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close MongoDB connection on shutdown"""
+    await close_mongo_connection()
+    logger.info("MongoDB connection closed on shutdown")
 
 # Dependencies
 async def get_current_user(request: Request):
@@ -215,7 +228,18 @@ class VendorUpdateSchema(BaseModel):
     payoutCycle: Optional[str] = None
     payoutDate: Optional[str] = None
 
-# OTP Endpoints
+# Chat and Update Request Models
+class ChatMessageSchema(BaseModel):
+    message: str
+    attachments: Optional[List[Dict[str, Any]]] = []
+
+class UpdateRequestApprovalSchema(BaseModel):
+    pass  # No body needed for approval
+
+class UpdateRequestRejectionSchema(BaseModel):
+    reason: str
+
+
 @app.post("/api/auth/send-otp")
 async def send_otp(data: SendOtpRequest):
     try:
@@ -755,19 +779,23 @@ async def get_vendor_stats(current_user: dict = Depends(get_current_user)):
 
 @app.put("/api/vendor/profile")
 async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = Depends(get_current_user)):
+    """
+    Update vendor profile - Creates an approval request instead of direct update.
+    Non-media field updates require admin/manager approval via chat.
+    """
     if current_user.get("role") != "vendor":
         raise HTTPException(status_code=403, detail="Vendor access required")
     
     try:
-        # Get vendor ID first
-        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        # Get current vendor data
+        vendor_res = supabase_admin.table("vendors").select("*").eq("user_id", current_user["id"]).single().execute()
         if not vendor_res.data:
             raise HTTPException(status_code=404, detail="Vendor profile not found")
         
         vendor_id = vendor_res.data["id"]
+        current_vendor_data = vendor_res.data
         
-        # Prepare update data (only non-None fields)
-        update_data = {}
+        # Field mapping from pydantic to database
         field_map = {
             "businessName": "business_name",
             "legalName": "legal_name",
@@ -789,28 +817,311 @@ async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = D
             "payoutDate": "payout_date"
         }
         
+        # Prepare update data (only changed fields)
+        requested_data = {}
+        current_data_snapshot = {}
+        changed_fields = []
+        
         for pydantic_field, db_field in field_map.items():
             val = getattr(data, pydantic_field)
             if val is not None:
-                update_data[db_field] = val
+                current_val = current_vendor_data.get(db_field)
+                # Only include if actually different
+                if val != current_val:
+                    requested_data[db_field] = val
+                    current_data_snapshot[db_field] = current_val
+                    changed_fields.append(pydantic_field)
         
-        if update_data:
-            res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
-            
-            # Also update name in users table if contactPerson changed
-            if "contact_person" in update_data:
-                supabase_admin.table("users").update({"name": update_data["contact_person"]}).eq("id", current_user["id"]).execute()
-            
-            return {"success": True, "vendor": res.data[0]}
+        if not requested_data:
+            return {"success": True, "message": "No changes detected", "pending_approval": False}
         
-        return {"success": True, "message": "No changes requested"}
+        # Create update request in MongoDB (requires approval)
+        update_request = await chat_service.create_update_request(
+            vendor_id=vendor_id,
+            requested_by=current_user["id"],
+            requested_by_name=current_user.get("name", current_user.get("email", "Vendor")),
+            current_data=current_data_snapshot,
+            requested_data=requested_data,
+            changed_fields=changed_fields
+        )
+        
+        if update_request:
+            return {
+                "success": True,
+                "message": "Your profile update request has been submitted for approval. You will be notified once it is reviewed.",
+                "pending_approval": True,
+                "request_id": update_request.get("id"),
+                "changed_fields": changed_fields
+            }
+        else:
+            # MongoDB not available - fallback to direct update
+            logger.warning("MongoDB not available - falling back to direct update")
+            res = supabase_admin.table("vendors").update(requested_data).eq("id", vendor_id).execute()
+            
+            if "contact_person" in requested_data:
+                supabase_admin.table("users").update({"name": requested_data["contact_person"]}).eq("id", current_user["id"]).execute()
+            
+            return {"success": True, "vendor": res.data[0], "pending_approval": False}
         
     except Exception as e:
         logger.error(f"Update vendor profile error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Removed redundant get_vendors endpoint
+
+# ==================== CHAT ENDPOINTS ====================
+
+@app.post("/api/chat/messages/{vendor_id}")
+async def send_chat_message(
+    vendor_id: str,
+    data: ChatMessageSchema,
+    current_user: dict = Depends(get_current_user)
+):
+    """Send a chat message (vendor to admin or admin to vendor)"""
+    try:
+
+        user_role = current_user.get("role")
+        sender = "vendor" if user_role == "vendor" else "admin"
+        
+        # Verify vendor access for vendor role
+        if user_role == "vendor":
+            vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+            if not vendor_res.data or vendor_res.data["id"] != vendor_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        
+        message = await chat_service.create_message(
+            vendor_id=vendor_id,
+            sender=sender,
+            sender_id=current_user["id"],
+            sender_name=current_user.get("name", current_user.get("email", "Unknown")),
+            message=data.message,
+            message_type="text",
+            attachments=data.attachments
+        )
+        
+        if message:
+            return {"success": True, "message": message}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send message - chat service unavailable")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Send chat message error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chat/messages/{vendor_id}")
+async def get_chat_messages(
+    vendor_id: str,
+    current_user: dict = Depends(get_current_user),
+    limit: int = 100,
+    skip: int = 0
+):
+    """Get chat messages for a specific vendor"""
+    try:
+
+        user_role = current_user.get("role")
+        
+        # Verify access
+        if user_role == "vendor":
+            vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+            if not vendor_res.data or vendor_res.data["id"] != vendor_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif user_role not in ["admin", "manager"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        messages = await chat_service.get_messages_by_vendor(vendor_id, limit, skip)
+        
+        # Mark messages as read
+        reader = "vendor" if user_role == "vendor" else "admin"
+        await chat_service.mark_messages_read(vendor_id, reader)
+        
+        return {"success": True, "messages": messages}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get chat messages error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/chat/unread-count", dependencies=[Depends(require_staff)])
+async def get_unread_count():
+    """Get count of unread messages from vendors"""
+    try:
+        count = await chat_service.get_unread_count_for_admin()
+        return {"success": True, "unread_count": count}
+    except Exception as e:
+        logger.error(f"Get unread count error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== UPDATE REQUEST ENDPOINTS ====================
+
+@app.get("/api/admin/update-requests", dependencies=[Depends(require_staff)])
+async def get_update_requests(
+    status: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0
+):
+    """Get update requests (for admin/manager approval)"""
+    try:
+        if status == "pending" or vendor_id:
+            requests = await chat_service.get_pending_update_requests(vendor_id, limit, skip)
+        else:
+            requests = await chat_service.get_all_update_requests(status, limit, skip)
+        
+        return {"success": True, "requests": requests, "count": len(requests)}
+        
+    except Exception as e:
+        logger.error(f"Get update requests error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/update-requests/{request_id}", dependencies=[Depends(require_staff)])
+async def get_update_request_detail(request_id: str):
+    """Get a specific update request by ID"""
+    try:
+        request = await chat_service.get_update_request_by_id(request_id)
+        if not request:
+            raise HTTPException(status_code=404, detail="Update request not found")
+        
+        return {"success": True, "request": request}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get update request detail error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/update-requests/{request_id}/approve", dependencies=[Depends(require_staff)])
+async def approve_update_request(
+    request_id: str,
+    current_user: dict = Depends(require_staff)
+):
+    """Approve a vendor update request and apply changes"""
+    try:
+        # Get the request first
+        request = await chat_service.get_update_request_by_id(request_id)
+        if not request:
+            raise HTTPException(status_code=404, detail="Update request not found")
+        
+        if request.get("status") != "pending":
+            raise HTTPException(status_code=400, detail=f"Request already {request.get('status')}")
+        
+        # Approve the request
+        approved_request = await chat_service.approve_update_request(
+            request_id=request_id,
+            reviewed_by=current_user["id"],
+            reviewed_by_name=current_user.get("name", current_user.get("email", "Admin"))
+        )
+        
+        if not approved_request:
+            raise HTTPException(status_code=500, detail="Failed to approve request")
+        
+        return {
+            "success": True,
+            "message": "Update request approved and changes applied",
+            "request": approved_request
+        }
+
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Approve update request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/update-requests/{request_id}/reject", dependencies=[Depends(require_staff)])
+async def reject_update_request(
+    request_id: str,
+    data: UpdateRequestRejectionSchema,
+    current_user: dict = Depends(require_staff)
+):
+    """Reject a vendor update request with a reason"""
+    try:
+        # Get the request first
+        request = await chat_service.get_update_request_by_id(request_id)
+        if not request:
+            raise HTTPException(status_code=404, detail="Update request not found")
+        
+        if request.get("status") != "pending":
+            raise HTTPException(status_code=400, detail=f"Request already {request.get('status')}")
+        
+        # Reject the request
+        rejected_request = await chat_service.reject_update_request(
+            request_id=request_id,
+            reviewed_by=current_user["id"],
+            reviewed_by_name=current_user.get("name", current_user.get("email", "Admin")),
+            reason=data.reason
+        )
+        
+        if not rejected_request:
+            raise HTTPException(status_code=500, detail="Failed to reject request")
+        
+        return {
+            "success": True,
+            "message": "Update request rejected",
+            "request": rejected_request
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reject update request error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/vendor/update-requests")
+async def get_vendor_update_requests(
+    current_user: dict = Depends(get_current_user),
+    status: Optional[str] = None,
+    limit: int = 20,
+    skip: int = 0
+):
+    """Get update requests for the current vendor"""
+    if current_user.get("role") != "vendor":
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    try:
+        # Get vendor ID
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        vendor_id = vendor_res.data["id"]
+        
+        if status == "pending":
+            requests = await chat_service.get_pending_update_requests(vendor_id, limit, skip)
+        else:
+            # Get all requests for this vendor
+            from app.database.mongo_config import get_update_requests_collection
+            collection = await get_update_requests_collection()
+            if collection:
+                query = {"vendor_id": vendor_id}
+                if status:
+                    query["status"] = status
+                
+                cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
+                requests = []
+                async for doc in cursor:
+                    requests.append(chat_service._serialize_update_request(doc))
+            else:
+                requests = []
+        
+        return {"success": True, "requests": requests, "count": len(requests)}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get vendor update requests error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
