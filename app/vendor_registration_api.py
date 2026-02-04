@@ -13,6 +13,8 @@ load_dotenv()
 
 from supabase import create_client, Client
 import logging
+from app.services.sms_service import SmsService
+import asyncio
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -107,6 +109,14 @@ class VendorRegistrationRequest(BaseModel):
 
     # Account Details
     password: str
+    phoneVerified: bool = False
+
+class SendOtpRequest(BaseModel):
+    phoneNumber: str
+
+class VerifyOtpRequest(BaseModel):
+    phoneNumber: str
+    otpCode: str
 
 class FileUploadRequest(BaseModel):
     vendor_id: str
@@ -155,6 +165,30 @@ def upload_file_to_storage(file: UploadFile, vendor_id: str, file_type: str, ser
 async def root():
     return {"message": "Vendor Registration API is running"}
 
+@app.post("/api/auth/send-otp")
+async def send_otp(data: SendOtpRequest):
+    try:
+        success = await SmsService.send_otp(data.phoneNumber)
+        if success:
+            return {"success": True, "message": "OTP sent successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send OTP")
+    except Exception as e:
+        logger.error(f"Send OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/verify-otp")
+async def verify_otp(data: VerifyOtpRequest):
+    try:
+        is_valid = await SmsService.verify_otp(data.phoneNumber, data.otpCode)
+        if is_valid:
+            return {"success": True, "message": "OTP verified successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+    except Exception as e:
+        logger.error(f"Verify OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/vendor/register", status_code=status.HTTP_201_CREATED)
 async def register_vendor(vendor_data: VendorRegistrationRequest):
     """
@@ -162,6 +196,13 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
     """
     try:
         logger.info(f"Starting vendor registration for: {vendor_data.email}")
+        
+        # Enforce phone verification
+        if not vendor_data.phoneVerified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Mobile number must be verified before registration."
+            )
         
         # 1. Check if email already exists in users table - Use admin client for consistency
         existing_user = supabase_admin.table("users").select("*").eq("email", vendor_data.email).execute()
@@ -276,6 +317,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
             "grant_rights": vendor_data.grantRights,
             "confirm_accuracy": vendor_data.confirmAccuracy,
             "marketing_permission": vendor_data.marketingPermission,
+            "phone_verified": vendor_data.phoneVerified,
             "status": "pending"
         }
         
