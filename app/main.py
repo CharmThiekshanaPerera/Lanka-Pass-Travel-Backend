@@ -206,6 +206,13 @@ class VerifyOtpRequest(BaseModel):
 class VendorStatusRequest(BaseModel):
     status: str
     status_reason: Optional[str] = None
+    admin_notes: Optional[str] = None
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class ServiceStatusRequest(BaseModel):
+    status: str
 
 class DeleteFileSchema(BaseModel):
     vendor_id: str
@@ -347,6 +354,23 @@ async def verify_otp(data: VerifyOtpRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Auth API
+@app.post("/api/auth/refresh")
+async def refresh_token(data: RefreshRequest):
+    try:
+        res = supabase.auth.refresh_session(data.refresh_token)
+        if not res.session:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+        return {
+            "access_token": res.session.access_token,
+            "refresh_token": res.session.refresh_token,
+            "token_type": "bearer",
+            "expires_in": res.session.expires_in,
+            "user": res.user
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Refresh failed: {str(e)}")
+
 @app.post("/api/auth/login")
 async def login(data: LoginRequest):
     try:
@@ -361,8 +385,9 @@ async def login(data: LoginRequest):
         
         user_id = auth_res.user.id
         user_email = auth_res.user.email
-        user_role = auth_res.user.user_metadata.get("role", "user") if auth_res.user.user_metadata else "user"
-        user_name = auth_res.user.user_metadata.get("name", "") if auth_res.user.user_metadata else ""
+        user_metadata = auth_res.user.user_metadata or {}
+        user_role = user_metadata.get("role", "user")
+        user_name = user_metadata.get("name", "")
 
         try:
             user_data = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -383,11 +408,24 @@ async def login(data: LoginRequest):
                 "is_active": True
             }
         
+        # Check Vendor Status if role is vendor
+        if user_profile.get("role") == "vendor":
+            vendor_data = supabase_admin.table("vendors").select("status").eq("user_id", user_id).execute()
+            if vendor_data.data:
+                vendor_status = vendor_data.data[0].get("status")
+                if vendor_status in ["freeze", "terminated", "suspended"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Account is {vendor_status}. Please contact support."
+                    )
+        
         return {
             "access_token": auth_res.session.access_token,
+            "refresh_token": auth_res.session.refresh_token,
             "token_type": "bearer",
             "user": user_profile
         }
+    except HTTPException: raise
     except Exception as e:
         logger.exception("Login failed")
         raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
@@ -422,6 +460,7 @@ async def register(data: RegisterRequest):
             
             return {
                 "access_token": login_res.session.access_token,
+                "refresh_token": login_res.session.refresh_token,
                 "token_type": "bearer",
                 "user": user_profile
             }
@@ -449,6 +488,7 @@ async def register(data: RegisterRequest):
             
             return {
                 "access_token": login_res.session.access_token,
+                "refresh_token": login_res.session.refresh_token,
                 "token_type": "bearer",
                 "user": user_profile
             }
@@ -540,11 +580,48 @@ async def get_vendor_detail(vendor_id: str):
 
 @app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_admin)])
 async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
-    res = supabase_admin.table("vendors").update({
+    update_data = {
         "status": data.status,
         "status_reason": data.status_reason
-    }).eq("id", vendor_id).execute()
+    }
+    if data.admin_notes is not None:
+        update_data["admin_notes"] = data.admin_notes
+
+    res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
+
+@app.patch("/api/vendor/services/{service_id}/status")
+async def update_service_status(
+    service_id: str,
+    status_data: ServiceStatusRequest
+):
+    """
+    Update service status (Admin or Vendor)
+    """
+    try:
+        status_val = status_data.status
+        valid_statuses = ["pending", "approved", "active", "freeze", "rejected"]
+        if status_val not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        update_data = {"status": status_val}
+        result = supabase_admin.table("vendor_services").update(update_data).eq("id", service_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Service not found")
+            
+        return {
+            "success": True,
+            "message": f"Service status updated to {status_val}",
+            "service": result.data[0]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/admin/services/{service_id}/commission", dependencies=[Depends(require_admin)])
 async def update_service_commission(service_id: str, data: CommissionUpdateRequest):
