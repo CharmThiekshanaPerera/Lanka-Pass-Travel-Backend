@@ -176,6 +176,12 @@ class VendorStatusRequest(BaseModel):
     status: str
     status_reason: Optional[str] = None
 
+class DeleteFileSchema(BaseModel):
+    vendor_id: str
+    file_url: str
+    file_type: str
+    service_id: Optional[str] = None
+
 class ServiceSchema(BaseModel):
     serviceName: str
     serviceCategory: str
@@ -964,8 +970,29 @@ async def create_vendor_service(s: ServiceSchema, current_user: dict = Depends(g
             "service_time_slots": s.serviceTimeSlots or []
         }
         
-        res = supabase_admin.table("vendor_services").insert(db_service).execute()
-        return {"success": True, "service": res.data[0]}
+        # Create an approval request instead of direct insertion
+        from app.services.chat_service import chat_service
+        request = await chat_service.create_service_addition_request(
+            vendor_id=vendor_id,
+            requested_by=current_user["id"],
+            requested_by_name=current_user.get("name") or vendor_id,
+            requested_data=db_service
+        )
+        
+        if request:
+            return {
+                "success": True, 
+                "message": "Your new service has been submitted for approval. You can view its status in the support chat.",
+                "pending_approval": True,
+                "request_id": request["id"]
+            }
+        else:
+            # MongoDB not available - cannot create approval request
+            logger.error("MongoDB not available - cannot create service addition approval request")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Approval service temporarily unavailable. Please try again later."
+            )
         
     except Exception as e:
         logger.error(f"Create service error: {str(e)}")
@@ -1153,6 +1180,9 @@ async def upload_vendor_file(
         elif file_type == 'gallery':
             vendor_data = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
             current_gallery = vendor_data.data.get("gallery_urls", []) if vendor_data.data else []
+            # Safety check: ensure current_gallery is a list
+            if not isinstance(current_gallery, list):
+                current_gallery = []
             updated_gallery = current_gallery + [public_url]
             supabase_admin.table("vendors").update({"gallery_urls": updated_gallery}).eq("id", vendor_id).execute()
             
@@ -1172,6 +1202,51 @@ async def upload_vendor_file(
     except Exception as e:
         logger.error(f"File upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+
+@app.delete("/api/vendor/delete-file")
+async def delete_vendor_file(
+    data: DeleteFileSchema,
+    current_user: dict = Depends(require_vendor)
+):
+    """
+    Delete a vendor file (gallery image or service image)
+    """
+    try:
+        vendor_id = data.vendor_id
+        file_url = data.file_url
+        file_type = data.file_type
+        service_id = data.service_id
+        
+        # Verify ownership
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data or vendor_res.data["id"] != vendor_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        if file_type == 'gallery':
+            vendor_data = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
+            if vendor_data.data:
+                gallery = vendor_data.data.get("gallery_urls", [])
+                if file_url in gallery:
+                    gallery.remove(file_url)
+                    supabase_admin.table("vendors").update({"gallery_urls": gallery}).eq("id", vendor_id).execute()
+        
+        elif file_type == 'service_image' and service_id:
+            service_data = supabase_admin.table("vendor_services").select("image_urls").eq("id", service_id).single().execute()
+            if service_data.data:
+                images = service_data.data.get("image_urls", [])
+                if file_url in images:
+                    images.remove(file_url)
+                    supabase_admin.table("vendor_services").update({"image_urls": images}).eq("id", service_id).execute()
+        
+        # We don't delete from storage yet to keep it simple, just remove from DB list
+        return {"success": True, "message": "File removed successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File deletion error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"File deletion failed: {str(e)}")
 
 
 # ==================== CHAT ENDPOINTS ====================

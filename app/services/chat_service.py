@@ -287,6 +287,59 @@ class ChatService:
             logger.error(f"Error creating service update request: {str(e)}")
             return None
     
+    async def create_service_addition_request(
+        self,
+        vendor_id: str,
+        requested_by: str,
+        requested_by_name: str,
+        requested_data: Dict[str, Any]
+    ) -> Optional[Dict]:
+        """Create a new service addition request"""
+        try:
+            collection = await get_update_requests_collection()
+            if collection is None:
+                logger.error("MongoDB not available - cannot create service addition request")
+                return None
+            
+            doc = {
+                "vendor_id": vendor_id,
+                "requested_by": requested_by,
+                "requested_by_name": requested_by_name,
+                "request_type": "service_addition",
+                "current_data": {}, # Empty for new additions
+                "requested_data": requested_data,
+                "changed_fields": list(requested_data.keys()),
+                "status": "pending",
+                "reviewed_by": None,
+                "reviewed_by_name": None,
+                "review_reason": None,
+                "created_at": datetime.utcnow(),
+                "reviewed_at": None
+            }
+            
+            result = await collection.insert_one(doc)
+            doc["_id"] = str(result.inserted_id)
+            
+            logger.info(f"Service addition request created: {result.inserted_id}")
+            
+            # Create a chat message about this request
+            service_name = requested_data.get("service_name", "New Service")
+            await self.create_message(
+                vendor_id=vendor_id,
+                sender="vendor",
+                sender_id=requested_by,
+                sender_name=requested_by_name,
+                message=f"🆕 New service addition request: **{service_name}**.\n\nPlease review and approve the new service.",
+                message_type="update_request",
+                update_request_id=str(result.inserted_id)
+            )
+            
+            return self._serialize_update_request(doc)
+            
+        except Exception as e:
+            logger.error(f"Error creating service addition request: {str(e)}")
+            return None
+    
     async def get_pending_update_requests(
         self,
         vendor_id: Optional[str] = None,
@@ -385,6 +438,31 @@ class ChatService:
                         sender_id=reviewed_by,
                         sender_name=reviewed_by_name,
                         message=f"✅ Your service update request has been **approved** by {reviewed_by_name}.\n\nYour service has been updated successfully.",
+                        message_type="system",
+                        update_request_id=request_id
+                    )
+                elif request_type == "service_addition":
+                    # Apply changes to vendor_services table (INSERT)
+                    if requested_data:
+                        # Ensure vendor_id is in the data
+                        requested_data["vendor_id"] = vendor_id
+                        db_res = await SupabaseManager.execute_query(
+                            table="vendor_services",
+                            operation="insert",
+                            data=requested_data
+                        )
+                        
+                        if not db_res["success"]:
+                            logger.error(f"Failed to add new service: {db_res['error']}")
+                    
+                    # Create a system message about approval
+                    service_name = requested_data.get("service_name", "New Service")
+                    await self.create_message(
+                        vendor_id=vendor_id,
+                        sender="admin",
+                        sender_id=reviewed_by,
+                        sender_name=reviewed_by_name,
+                        message=f"✅ Your new service '**{service_name}**' has been **approved** by {reviewed_by_name}.\n\nThe service is now active.",
                         message_type="system",
                         update_request_id=request_id
                     )
