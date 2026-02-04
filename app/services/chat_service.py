@@ -185,6 +185,68 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error getting vendor unread count: {str(e)}")
             return 0
+
+    async def get_admin_chat_summary(self) -> List[Dict]:
+        """Get summary of chats for admin (latest message and unread count per vendor)"""
+        try:
+            collection = await get_chat_messages_collection()
+            if collection is None:
+                return []
+            
+            # Aggregate to find latest message and unread count per vendor
+            pipeline = [
+                {"$sort": {"created_at": -1}}, # Sort messages by date descending
+                {
+                    "$group": {
+                        "_id": "$vendor_id",
+                        "latest_message": {"$first": "$$ROOT"},
+                        "unread_count": {
+                            "$sum": {
+                                "$cond": [
+                                    {"$and": [
+                                        {"$eq": ["$sender", "vendor"]},
+                                        {"$eq": ["$read_at", None]}
+                                    ]},
+                                    1,
+                                    0
+                                ]
+                            }
+                        }
+                    }
+                },
+                {"$sort": {"latest_message.created_at": -1}} # Sort vendors by latest message
+            ]
+            
+            cursor = collection.aggregate(pipeline)
+            summary = []
+            
+            async for doc in cursor:
+                vendor_id = doc["_id"]
+                latest_msg = self._serialize_message(doc["latest_message"])
+                unread_count = doc["unread_count"]
+                
+                # Try to get vendor name from Supabase
+                vendor_name = "Unknown Vendor"
+                try:
+                    from app.database.supabase_client import supabase_admin
+                    vendor_res = supabase_admin.table("vendors").select("business_name").eq("id", vendor_id).single().execute()
+                    if vendor_res.data:
+                        vendor_name = vendor_res.data.get("business_name", "Unknown Vendor")
+                except Exception as e:
+                    logger.error(f"Error fetching vendor name for summary: {str(e)}")
+
+                summary.append({
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor_name,
+                    "latest_message": latest_msg,
+                    "unread_count": unread_count
+                })
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Error getting admin chat summary: {str(e)}")
+            return []
     
     # ==================== UPDATE REQUESTS ====================
     

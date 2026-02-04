@@ -1337,6 +1337,17 @@ async def get_unread_count():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/admin/chat/summary", dependencies=[Depends(require_staff)])
+async def get_chat_summary():
+    """Get summary of all vendor chats for admin"""
+    try:
+        summary = await chat_service.get_admin_chat_summary()
+        return {"success": True, "summary": summary}
+    except Exception as e:
+        logger.error(f"Get chat summary error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/vendor/chat/unread-count")
 async def get_vendor_unread_count(
     current_user: dict = Depends(require_vendor)
