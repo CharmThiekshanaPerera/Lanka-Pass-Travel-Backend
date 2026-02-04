@@ -1337,6 +1337,27 @@ async def get_unread_count():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/vendor/chat/unread-count")
+async def get_vendor_unread_count(
+    current_user: dict = Depends(require_vendor)
+):
+    """Get count of unread messages for current vendor from admin"""
+    try:
+        # Get vendor id
+        vendor_res = supabase_admin.table("vendors").select("id").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        vendor_id = vendor_res.data["id"]
+        count = await chat_service.get_unread_count_for_vendor(vendor_id)
+        return {"success": True, "unread_count": count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get vendor unread count error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== UPDATE REQUEST ENDPOINTS ====================
 
 @app.get("/api/admin/update-requests", dependencies=[Depends(require_staff)])

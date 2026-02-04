@@ -166,6 +166,25 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error getting unread count: {str(e)}")
             return 0
+
+    async def get_unread_count_for_vendor(self, vendor_id: str) -> int:
+        """Get count of unread messages from admin for a specific vendor"""
+        try:
+            collection = await get_chat_messages_collection()
+            if collection is None:
+                return 0
+            
+            count = await collection.count_documents({
+                "vendor_id": vendor_id,
+                "sender": "admin",
+                "read_at": None
+            })
+            
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error getting vendor unread count: {str(e)}")
+            return 0
     
     # ==================== UPDATE REQUESTS ====================
     
