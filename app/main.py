@@ -209,6 +209,23 @@ class VendorStatusRequest(BaseModel):
     admin_notes: Optional[str] = None
     is_public: Optional[bool] = None
 
+class VendorProfileUpdate(BaseModel):
+    business_name: Optional[str] = None
+    vendor_type: Optional[str] = None
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    business_address: Optional[str] = None
+    operating_areas: Optional[list] = None
+    email: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_holder_name: Optional[str] = None
+    account_number: Optional[str] = None
+    bank_branch: Optional[str] = None
+    payout_frequency: Optional[str] = None
+    payout_cycle: Optional[str] = None
+    payout_date: Optional[str] = None
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
@@ -612,6 +629,26 @@ async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
 
     res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
+
+@app.patch("/api/admin/vendors/{vendor_id}/profile", dependencies=[Depends(require_staff)])
+async def update_vendor_profile(vendor_id: str, data: VendorProfileUpdate):
+    update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    if "email" in update_data:
+        new_email = update_data["email"]
+        dup_check = supabase_admin.table("vendors").select("id").eq("email", new_email).neq("id", vendor_id).execute()
+        if dup_check.data and len(dup_check.data) > 0:
+            raise HTTPException(status_code=400, detail="Use another email ID")
+
+    try:
+        res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+        return {"success": True, "vendor": res.data[0]}
+    except Exception as e:
+        logger.error(f"Update vendor profile error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/vendor/services/{service_id}/status")
 async def update_service_status(
