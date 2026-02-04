@@ -35,7 +35,9 @@ async def get_mongo_client() -> AsyncIOMotorClient:
                 "serverSelectionTimeoutMS": 5000,
                 "connectTimeoutMS": 5000,
                 "retryWrites": True,
-                "tls": True
+                "tls": True,
+                "maxPoolSize": 50,
+                "minPoolSize": 10
             }
             
             # Use certifi for CA certificates

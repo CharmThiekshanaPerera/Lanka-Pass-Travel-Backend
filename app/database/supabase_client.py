@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from supabase import create_client, Client
 from app.config import settings
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +56,15 @@ class SupabaseManager:
                 if "filters" in kwargs:
                     for filter_key, filter_value in kwargs["filters"].items():
                         query = query.eq(filter_key, filter_value)
+                
                 if "single" in kwargs and kwargs["single"]:
-                    response = query.single().execute()
+                    response = await asyncio.to_thread(query.single().execute)
                 else:
-                    response = query.execute()
+                    response = await asyncio.to_thread(query.execute)
             
             elif operation == "insert":
                 data = kwargs.get("data", {})
-                response = table_ref.insert(data).execute()
+                response = await asyncio.to_thread(table_ref.insert(data).execute)
             
             elif operation == "update":
                 data = kwargs.get("data", {})
@@ -70,14 +72,14 @@ class SupabaseManager:
                 query = table_ref.update(data)
                 for filter_key, filter_value in filters.items():
                     query = query.eq(filter_key, filter_value)
-                response = query.execute()
+                response = await asyncio.to_thread(query.execute)
             
             elif operation == "delete":
                 filters = kwargs.get("filters", {})
                 query = table_ref.delete()
                 for filter_key, filter_value in filters.items():
                     query = query.eq(filter_key, filter_value)
-                response = query.execute()
+                response = await asyncio.to_thread(query.execute)
             
             else:
                 raise ValueError(f"Unknown operation: {operation}")
