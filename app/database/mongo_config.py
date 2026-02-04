@@ -30,12 +30,52 @@ async def get_mongo_client() -> AsyncIOMotorClient:
             return None
         
         try:
-            _mongo_client = AsyncIOMotorClient(MONGO_URI)
-            # Test connection
+            # Standard Atlas connection options for Windows/SSL issues
+            options = {
+                "serverSelectionTimeoutMS": 5000,
+                "connectTimeoutMS": 5000,
+                "retryWrites": True,
+                "tls": True
+            }
+            
+            # Use certifi for CA certificates
+            try:
+                import certifi
+                options["tlsCAFile"] = certifi.where()
+                logger.info("Using certifi CA bundle for MongoDB connection")
+            except ImportError:
+                logger.warning("certifi not found, relying on system CA certificates")
+
+            # Initialize client
+            _mongo_client = AsyncIOMotorClient(MONGO_URI, **options)
+            
+            # Test connection with a short timeout
             await _mongo_client.admin.command('ping')
             logger.info("Successfully connected to MongoDB Atlas")
+            return _mongo_client
+            
         except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {str(e)}")
+            logger.error(f"MongoDB connection attempt 1 failed: {str(e)}")
+            
+            # Second attempt: try allowing invalid certificates (common fallback for SSL issues)
+            try:
+                logger.warning("Retrying with tlsAllowInvalidCertificates=True")
+                # Create a new options dict for retry
+                retry_options = {
+                    "serverSelectionTimeoutMS": 5000,
+                    "connectTimeoutMS": 5000,
+                    "tlsAllowInvalidCertificates": True,
+                    "tls": True
+                }
+                _mongo_client = AsyncIOMotorClient(MONGO_URI, **retry_options)
+                await _mongo_client.admin.command('ping')
+                logger.info("Successfully connected to MongoDB Atlas (Insecure Mode)")
+                return _mongo_client
+            except Exception as e2:
+                logger.error(f"MongoDB connection attempt 2 failed: {str(e2)}")
+                _mongo_client = None
+                return None
+            
             _mongo_client = None
             
     return _mongo_client

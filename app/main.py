@@ -1,7 +1,7 @@
 ﻿# main.py
 from __future__ import annotations
 import fastapi
-from fastapi import FastAPI, HTTPException, UploadFile, Form, File, Depends, Request
+from fastapi import FastAPI, HTTPException, UploadFile, Form, File, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
@@ -51,11 +51,10 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize MongoDB indexes on startup"""
-    try:
-        await ensure_indexes()
-        logger.info("MongoDB indexes ensured on startup")
-    except Exception as e:
-        logger.warning(f"MongoDB startup warning: {str(e)} - Chat features may be unavailable")
+    # Run in background to avoid blocking app startup if connection is slow
+    import asyncio
+    asyncio.create_task(ensure_indexes())
+    logger.info("MongoDB index creation started in background")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -249,8 +248,6 @@ class VendorRegisterRequest(BaseModel):
     grantRights: bool = False
     confirmAccuracy: bool = False
     # Payout prefs
-    payoutCycle: Optional[str] = None
-    payoutDate: Optional[str] = None
     # Services
     services: List[ServiceSchema] = []
 
@@ -271,8 +268,7 @@ class VendorUpdateSchema(BaseModel):
     accountHolderName: Optional[str] = None
     accountNumber: Optional[str] = None
     bankBranch: Optional[str] = None
-    payoutCycle: Optional[str] = None
-    payoutDate: Optional[str] = None
+    bankBranch: Optional[str] = None
     regCertificateUrl: Optional[str] = None
     nicPassportUrl: Optional[str] = None
     tourismLicenseUrl: Optional[str] = None
@@ -615,73 +611,7 @@ async def export_vendors():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# File Upload API
-@app.post("/api/vendor/upload-file")
-async def upload_file(
-    file: UploadFile = File(...), 
-    file_type: str = Form(...),
-    vendor_id: str = Form(...),
-    service_index: str = Form(None)
-):
-    try:
-        file_ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
-        file_name = f"{file_type}_{uuid.uuid4()}.{file_ext}"
-        bucket_name = "vendor-docs"
-        
-        content = await file.read()
-        
-        try:
-            supabase_admin.storage.from_(bucket_name).upload(
-                path=file_name,
-                file=content,
-                file_options={"content-type": file.content_type}
-            )
-        except Exception as upload_err:
-            logger.error(f"Storage upload failed: {str(upload_err)}")
-            if "Bucket not found" in str(upload_err):
-                 raise HTTPException(status_code=404, detail="Storage bucket 'vendor-docs' not found.")
-            raise HTTPException(status_code=500, detail=f"Failed to upload: {str(upload_err)}")
-            
-        project_url = os.getenv("SUPABASE_URL").rstrip("/")
-        public_url = f"{project_url}/storage/v1/object/public/{bucket_name}/{file_name}"
-        
-        try:
-            update_data = {}
-            if file_type == "logo": update_data["logo_url"] = public_url
-            elif file_type == "cover_image": update_data["cover_image_url"] = public_url
-            elif file_type == "reg_certificate": update_data["reg_certificate_url"] = public_url
-            elif file_type == "nic_passport": update_data["nic_passport_url"] = public_url
-            elif file_type == "tourism_license": update_data["tourism_license_url"] = public_url
-            elif file_type == "promo_video": update_data["promo_video_url"] = public_url
-            elif file_type == "gallery":
-                current_vendor = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
-                urls = current_vendor.data.get("gallery_urls") or []
-                urls.append(public_url)
-                update_data["gallery_urls"] = urls
-            elif file_type.startswith("service_") and service_index is not None:
-                idx = int(service_index)
-                srv_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
-                if srv_res.data and len(srv_res.data) > idx:
-                    tid = srv_res.data[idx]["id"]
-                    imgs = srv_res.data[idx].get("image_urls") or []
-                    imgs.append(public_url)
-                    supabase_admin.table("vendor_services").update({"image_urls": imgs}).eq("id", tid).execute()
-            
-            if update_data:
-                # Only update metadata directly but NOT profile documents that need approval
-                # (regCertificateUrl, nicPassportUrl, tourismLicenseUrl are now handled via update request)
-                # logo and cover_image can still be updated directly
-                allowed_direct_updates = ["logo_url", "cover_image_url", "gallery_urls", "promo_video_url"]
-                direct_data = {k: v for k, v in update_data.items() if k in allowed_direct_updates}
-                if direct_data:
-                    supabase_admin.table("vendors").update(direct_data).eq("id", vendor_id).execute()
-        except Exception as db_err:
-            logger.error(f"DB update failed for file: {str(db_err)}")
-        
-        return {"success": True, "url": public_url}
-    except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # Vendor API
@@ -758,8 +688,7 @@ async def register_vendor(data: VendorRegisterRequest):
                 "cover_image_url": data.coverImageUrl,
                 "gallery_urls": data.galleryUrls,
                 # Payout
-                "payout_cycle": data.payoutCycle,
-                "payout_date": data.payoutDate,
+                # Payout
                 # Agreements
                 "accept_terms": data.acceptTerms,
                 "accept_commission": data.acceptCommission,
@@ -926,8 +855,7 @@ async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = D
             "accountHolderName": "account_holder_name",
             "accountNumber": "account_number",
             "bankBranch": "bank_branch",
-            "payoutCycle": "payout_cycle",
-            "payoutDate": "payout_date",
+            "bankBranch": "bank_branch",
             "regCertificateUrl": "reg_certificate_url",
             "nicPassportUrl": "nic_passport_url",
             "tourismLicenseUrl": "tourism_license_url"
@@ -970,14 +898,12 @@ async def update_vendor_profile(data: VendorUpdateSchema, current_user: dict = D
                 "changed_fields": changed_fields
             }
         else:
-            # MongoDB not available - fallback to direct update
-            logger.warning("MongoDB not available - falling back to direct update")
-            res = supabase_admin.table("vendors").update(requested_data).eq("id", vendor_id).execute()
-            
-            if "contact_person" in requested_data:
-                supabase_admin.table("users").update({"name": requested_data["contact_person"]}).eq("id", current_user["id"]).execute()
-            
-            return {"success": True, "vendor": res.data[0], "pending_approval": False}
+            # MongoDB not available - cannot create approval request
+            logger.error("MongoDB not available - cannot create approval request")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Approval service temporarily unavailable. Please try again later."
+            )
         
     except Exception as e:
         logger.error(f"Update vendor profile error: {str(e)}")
@@ -1154,10 +1080,12 @@ async def update_vendor_service(service_id: str, s: ServiceSchema, current_user:
                 "changed_fields": changed_fields
             }
         else:
-            # MongoDB not available - fallback to direct update
-            logger.warning("MongoDB not available - falling back to direct service update")
-            res = supabase_admin.table("vendor_services").update(requested_data).eq("id", service_id).execute()
-            return {"success": True, "service": res.data[0], "pending_approval": False}
+            # MongoDB not available - cannot create approval request
+            logger.error("MongoDB not available - cannot create service approval request")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Approval service temporarily unavailable. Please try again later."
+            )
         
     except HTTPException: raise
     except Exception as e:
@@ -1211,15 +1139,13 @@ async def upload_vendor_file(
         # Upload file to storage
         public_url = await upload_file_to_storage(file, vendor_id, file_type, service_id)
         
-        # Update vendor record with file URL if it's a profile/business field
-        if file_type in ['reg_certificate', 'nic_passport', 'tourism_license', 'logo', 'cover_image', 'business_reg_certificate']:
+        # Update vendor record with file URL ONLY for Media Tab items (direct updates)
+        # Documents (certificates, licenses) MUST go through profile update approval flow
+        if file_type in ['logo', 'cover_image', 'promo_video']:
             column_map = {
-                'reg_certificate': 'reg_certificate_url',
-                'business_reg_certificate': 'reg_certificate_url',
-                'nic_passport': 'nic_passport_url',
-                'tourism_license': 'tourism_license_url',
                 'logo': 'logo_url',
-                'cover_image': 'cover_image_url'
+                'cover_image': 'cover_image_url',
+                'promo_video': 'promo_video_url'
             }
             if file_type in column_map:
                 supabase_admin.table("vendors").update({column_map[file_type]: public_url}).eq("id", vendor_id).execute()
