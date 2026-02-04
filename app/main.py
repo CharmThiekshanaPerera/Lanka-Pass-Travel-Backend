@@ -578,7 +578,7 @@ async def get_vendor_detail(vendor_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_admin)])
+@app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_staff)])
 async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
     update_data = {
         "status": data.status,
@@ -1519,17 +1519,17 @@ async def get_vendor_unread_count(
 
 @app.get("/api/admin/update-requests", dependencies=[Depends(require_staff)])
 async def get_update_requests(
-    req_status: Optional[str] = None,
+    status: Optional[str] = None,
     vendor_id: Optional[str] = None,
     limit: int = 50,
     skip: int = 0
 ):
     """Get update requests (for admin/manager approval)"""
     try:
-        if req_status == "pending" or vendor_id:
+        if status == "pending" or vendor_id:
             requests = await chat_service.get_pending_update_requests(vendor_id, limit, skip)
         else:
-            requests = await chat_service.get_all_update_requests(req_status, limit, skip)
+            requests = await chat_service.get_all_update_requests(status, limit, skip)
         
         return {"success": True, "requests": requests, "count": len(requests)}
         
