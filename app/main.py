@@ -213,7 +213,7 @@ class VendorProfileUpdate(BaseModel):
     business_name: Optional[str] = None
     vendor_type: Optional[str] = None
     contact_person: Optional[str] = None
-    phone: Optional[str] = None
+    phone_number: Optional[str] = None
     website: Optional[str] = None
     business_address: Optional[str] = None
     operating_areas: Optional[list] = None
@@ -639,9 +639,30 @@ async def update_vendor_profile(vendor_id: str, data: VendorProfileUpdate):
 
     if "email" in update_data:
         new_email = update_data["email"]
+        # Duplicate check across all vendors
         dup_check = supabase_admin.table("vendors").select("id").eq("email", new_email).neq("id", vendor_id).execute()
         if dup_check.data and len(dup_check.data) > 0:
             raise HTTPException(status_code=400, detail="Use another email ID")
+
+        try:
+            # 1. Get user_id for this vendor
+            vendor_data_res = supabase_admin.table("vendors").select("user_id").eq("id", vendor_id).single().execute()
+            if not vendor_data_res.data:
+                raise HTTPException(status_code=404, detail="Vendor not found")
+            user_id = vendor_data_res.data["user_id"]
+
+            # 2. Update Supabase Auth email
+            supabase_admin.auth.admin.update_user_by_id(user_id, {"email": new_email})
+            
+            # 3. Update public.users table email
+            supabase_admin.table("users").update({"email": new_email}).eq("id", user_id).execute()
+            
+            # 4. Update public.vendors table email (will be handled by the final update below if we don't pop it, but let's be explicit)
+            # Actually, the update_data already contains "email", so line 647 will update the vendors table.
+            logger.info(f"Email updated for vendor {vendor_id} to {new_email}")
+        except Exception as auth_err:
+            logger.error(f"Failed to sync email to auth/users: {str(auth_err)}")
+            raise HTTPException(status_code=500, detail=f"Email update failed: {str(auth_err)}")
 
     try:
         res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
