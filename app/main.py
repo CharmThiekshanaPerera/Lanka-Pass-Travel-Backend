@@ -11,6 +11,9 @@ import os
 import io
 import csv
 import asyncio
+import secrets
+import string
+import random
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -100,24 +103,53 @@ async def get_current_user(request: Request):
                     supabase_admin.table("users").select("*").eq("id", user_id).execute
                 )
                 if user_data.data:
-                    profile = user_data.data[0]
-                    f.write(f"DB Profile Found. Role: {profile.get('role')}\n")
-                    f.write(f"Returning DB Profile: {profile}\n")
-                    return profile
+                    p = user_data.data[0]
+                    f.write(f"DB Profile Found. Role: {p.get('role')}\n")
                 else:
                     f.write("Warning: No profile found in 'users' table\n")
+                    p = {
+                        "id": user_id,
+                        "email": user_email,
+                        "role": user_role_meta,
+                        "name": user_name_meta,
+                        "is_active": True
+                    }
             except Exception as db_err:
                 f.write(f"DB Error: {str(db_err)}\n")
+                p = {
+                    "id": user_id,
+                    "email": user_email,
+                    "role": user_role_meta,
+                    "name": user_name_meta,
+                    "is_active": True
+                }
 
-            # Fallback to metadata if DB lookup fails or returns nothing
-            f.write(f"Using Fallback Metadata. Role: {user_role_meta}\n")
-            return {
-                "id": user_id,
-                "email": user_email,
-                "role": user_role_meta,
-                "name": user_name_meta,
-                "is_active": True
-            }
+            # Apply vendor-only rule for password reset and status check
+            is_vendor = p.get("role") == "vendor"
+            p["requires_password_reset"] = p.get("requires_password_reset", False) if is_vendor else False
+            
+            # Auto-logout if vendor is not approved/active
+            if is_vendor:
+                # Need to fetch vendor status from vendors table
+                try:
+                    v_res = await asyncio.to_thread(
+                        supabase_admin.table("vendors").select("status").eq("user_id", user_id).execute
+                    )
+                    if v_res.data:
+                        v_status = v_res.data[0].get("status")
+                        p["status"] = v_status
+                        if v_status in ["freeze", "terminated", "suspended", "pending"]:
+                            f.write(f"Access Denied: Vendor status is {v_status}\n")
+                            raise HTTPException(
+                                status_code=403, 
+                                detail=f"Your account status is '{v_status}'. Access restricted."
+                            )
+                except HTTPException: raise
+                except Exception as ve:
+                    f.write(f"Vendor status check error: {str(ve)}\n")
+
+            f.write(f"Returning Profile: {p}\n")
+            return p
         except Exception as e:
             f.write(f"Critical Auth Error: {str(e)}\n")
             logger.error(f"Auth critical error: {str(e)}")
@@ -183,6 +215,9 @@ class LoginRequest(BaseModel):
     username: Optional[EmailStr] = None
     password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
 class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
@@ -218,6 +253,7 @@ class VendorStatusRequest(BaseModel):
     is_public: Optional[bool] = None
 
 class PasswordResetRequest(BaseModel):
+    current_password: str
     password: str
 
 class VendorProfileUpdate(BaseModel):
@@ -414,18 +450,119 @@ async def verify_email_otp(data: VerifyEmailOtpRequest):
 async def refresh_token(data: RefreshRequest):
     try:
         res = supabase.auth.refresh_session(data.refresh_token)
-        if not res.session:
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        # Fetch extended user profile for consistency
+        user_id = res.user.id
+        user_data = supabase_admin.table("users").select("*").eq("id", user_id).execute()
+        
+        if user_data.data:
+            user_profile = user_data.data[0]
+        else:
+            # Fallback
+            user_metadata = res.user.user_metadata or {}
+            user_profile = {
+                "id": user_id,
+                "email": res.user.email,
+                "role": user_metadata.get("role", "user"),
+                "name": user_metadata.get("name", ""),
+                "is_active": True
+            }
             
+        # Check if password reset is required - Only for vendors
+        is_vendor = user_profile.get("role") == "vendor"
+        requires_reset = user_profile.get("requires_password_reset", False) if is_vendor else False
+        user_profile["requires_password_reset"] = requires_reset
+
         return {
             "access_token": res.session.access_token,
             "refresh_token": res.session.refresh_token,
             "token_type": "bearer",
             "expires_in": res.session.expires_in,
-            "user": res.user
+            "user": user_profile
         }
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Refresh failed: {str(e)}")
+
+@app.post("/api/auth/change-password")
+async def change_password(data: PasswordResetRequest, current_user: dict = Depends(get_current_user)):
+    try:
+        user_id = current_user["id"]
+        user_email = current_user["email"]
+        
+        # Verify current password by attempting a sign-in
+        try:
+            auth_verify = supabase.auth.sign_in_with_password({
+                "email": user_email,
+                "password": data.current_password
+            })
+            if not auth_verify.user:
+                raise HTTPException(status_code=401, detail="Invalid current password")
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid current password")
+
+        # Update Supabase Auth
+        supabase_admin.auth.admin.update_user_by_id(user_id, {"password": data.password})
+        
+        # Clear reset flag in database
+        supabase_admin.table("users").update({"requires_password_reset": False}).eq("id", user_id).execute()
+        
+        return {"success": True, "message": "Password changed successfully"}
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"Change password error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    try:
+        email = data.email.strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        logger.info(f"Forgot password request for: {email}")
+        
+        # Check if user exists and get their role
+        try:
+            # Using find instead of single to handle "not found" gracefully
+            user_data = supabase_admin.table("users").select("*").ilike("email", email).execute()
+            
+            if not user_data.data or len(user_data.data) == 0:
+                logger.warning(f"Forgot password: User '{email}' not found in 'users' table.")
+                raise HTTPException(status_code=404, detail="Email not found")
+            
+            user_info = user_data.data[0]
+            user_id = user_info["id"]
+            
+            logger.info(f"Generating temp password for user {user_id}")
+            
+            # 1. Generate random temp password
+            chars = string.ascii_letters + string.digits + "!@#$%^&*"
+            temp_password = "".join(secrets.choice(chars) for _ in range(10))
+            
+            # 2. Update Supabase Auth via Admin API
+            supabase_admin.auth.admin.update_user_by_id(user_id, {"password": temp_password})
+            
+            # 3. Set requires_password_reset = True in users table
+            supabase_admin.table("users").update({"requires_password_reset": True}).eq("id", user_id).execute()
+            
+            # 4. Send email
+            from app.services.email_service import EmailService
+            email_sent = await EmailService.send_password_reset_email(email, temp_password)
+            
+            if not email_sent:
+                logger.error(f"Failed to send password reset email to {email}")
+                raise HTTPException(status_code=500, detail="Failed to send email. Please contact support.")
+
+            return {"success": True, "message": "Password reset email sent"}
+            
+        except HTTPException: raise
+        except Exception as query_err:
+            logger.error(f"Error in forgot_password search: {str(query_err)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(query_err)}")
+
+    except HTTPException: raise
+    except Exception as e:
+        logger.error(f"Forgot password error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process request: {str(e)}")
 
 @app.post("/api/auth/login")
 async def login(data: LoginRequest):
@@ -475,11 +612,15 @@ async def login(data: LoginRequest):
                         detail=f"Account is {vendor_status}. Please contact support."
                     )
         
+        # Check if password reset is required - Only for vendors
+        is_vendor = user_profile.get("role") == "vendor"
+        requires_reset = user_profile.get("requires_password_reset", False) if is_vendor else False
+
         return {
             "access_token": auth_res.session.access_token,
             "refresh_token": auth_res.session.refresh_token,
             "token_type": "bearer",
-            "user": user_profile
+            "user": {**user_profile, "requires_password_reset": requires_reset}
         }
     except HTTPException: raise
     except Exception as e:
@@ -662,10 +803,74 @@ async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
     if data.is_public is not None:
         update_data["is_public"] = data.is_public
 
+    # Get current vendor data to check old status and get user_id
+    vendor_res = supabase_admin.table("vendors").select("status, user_id").eq("id", vendor_id).single().execute()
+    old_status = vendor_res.data.get("status") if vendor_res.data else None
+    user_id = vendor_res.data.get("user_id") if vendor_res.data else None
+
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
     res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+    
+    # Handle Approval Credentials Email - Trigger whenever status is set to approved, 
+    # even if it was previously another status (as requested)
+    print(f"\n>>> DEBUG: update_vendor_status called for {vendor_id} with status {data.status}")
+    if data.status == "approved" and old_status != "approved":
+        print(f">>> DEBUG: Transitioning to approved. Processing approval for user_id: {user_id}")
+        if not user_id:
+            logger.error(f"FATAL: Could not send approval email for vendor {vendor_id}: user_id is missing in DB.")
+            print(f">>> DEBUG: FATAL - user_id is missing for vendor {vendor_id}")
+        else:
+            try:
+                # Get user email
+                user_res = supabase_admin.table("users").select("email").eq("id", user_id).single().execute()
+                user_email = user_res.data.get("email") if user_res.data else None
+                print(f">>> DEBUG: Found user_email: {user_email}")
+                
+                if not user_email:
+                     logger.error(f"FATAL: Could not send approval email: No email found in users table for user_id {user_id}")
+                     print(f">>> DEBUG: FATAL - No email found for user_id {user_id}")
+                else:
+                    # Generate random password
+                    alphabet = string.ascii_letters + string.digits
+                    temp_password = ''.join(secrets.choice(alphabet) for i in range(10))
+                    print(f">>> DEBUG: Generated temp password for {user_email}")
+                    
+                    # Update Supabase Auth Password
+                    try:
+                        supabase_admin.auth.admin.update_user_by_id(
+                            user_id,
+                            attributes={"password": temp_password}
+                        )
+                        print(f">>> DEBUG: Successfully updated Auth password for {user_id}")
+                    except Exception as auth_err:
+                        print(f">>> DEBUG: Auth password update FAILED: {str(auth_err)}")
+                        raise auth_err
+                    
+                    # Set reset flag in database
+                    # NOTE: This will fail until the user runs the migration
+                    try:
+                        flag_res = supabase_admin.table("users").update({"requires_password_reset": True}).eq("id", user_id).execute()
+                        print(f">>> DEBUG: Successfully set requires_password_reset flag for {user_id}")
+                    except Exception as db_err:
+                         logger.error(f"DATABASE ERROR: Failed to set requires_password_reset flag for user {user_id}. Migration missing?")
+                         print(f">>> DEBUG: DATABASE ERROR - Migration likely missing for requires_password_reset: {str(db_err)}")
+                    
+                    # Send Email
+                    print(f">>> DEBUG: Attempting to send email via EmailService...")
+                    email_success = await EmailService.send_approval_credentials(user_email, temp_password)
+                    if email_success:
+                        logger.info(f"SUCCESS: Successfully sent approval credentials to {user_email}")
+                        print(f">>> DEBUG: SUCCESS - Email sent to {user_email}")
+                    else:
+                        logger.error(f"FAILURE: EmailService failed to send approval credentials to {user_email}")
+                        print(f">>> DEBUG: FAILURE - EmailService returned False for {user_email}")
+            except Exception as e:
+                logger.error(f"CRITICAL ERROR in approval credential flow: {str(e)}")
+                print(f">>> DEBUG: CRITICAL ERROR - {str(e)}")
+                # We don't raise here to avoid blocking the status update
+
     return {"success": True, "vendor": res.data[0]}
 
 @app.patch("/api/admin/vendors/{vendor_id}/profile", dependencies=[Depends(require_staff)])
@@ -846,6 +1051,15 @@ async def reset_user_password(user_id: str, data: PasswordResetRequest):
             {"password": data.password}
         )
         
+        # For admin manual reset, only force reset if the user is a vendor
+        user_res = supabase_admin.table("users").select("role").eq("id", user_id).single().execute()
+        user_role = user_res.data.get("role") if user_res.data else "user"
+        
+        if user_role == "vendor":
+            supabase_admin.table("users").update({"requires_password_reset": True}).eq("id", user_id).execute()
+        else:
+            supabase_admin.table("users").update({"requires_password_reset": False}).eq("id", user_id).execute()
+
         # Log the action (security best practice)
         logger.info(f"Admin reset password for user: {user_id}")
         
