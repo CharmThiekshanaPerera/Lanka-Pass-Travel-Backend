@@ -209,6 +209,9 @@ class VendorStatusRequest(BaseModel):
     admin_notes: Optional[str] = None
     is_public: Optional[bool] = None
 
+class PasswordResetRequest(BaseModel):
+    password: str
+
 class VendorProfileUpdate(BaseModel):
     business_name: Optional[str] = None
     vendor_type: Optional[str] = None
@@ -225,6 +228,9 @@ class VendorProfileUpdate(BaseModel):
     payout_frequency: Optional[str] = None
     payout_cycle: Optional[str] = None
     payout_date: Optional[str] = None
+    reg_certificate_url: Optional[str] = None
+    nic_passport_url: Optional[str] = None
+    tourism_license_url: Optional[str] = None
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -795,6 +801,26 @@ async def delete_manager(user_id: str):
         supabase_admin.table("users").delete().eq("id", user_id).execute()
         return {"success": True, "message": "Manager deleted"}
     except Exception as e:
+        logger.error(f"Delete manager error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/admin/users/{user_id}/password", dependencies=[Depends(require_admin)])
+async def reset_user_password(user_id: str, data: PasswordResetRequest):
+    """Reset any user's password (Admin only)"""
+    try:
+        # Update supabase auth password
+        supabase_admin.auth.admin.update_user_by_id(
+            user_id, 
+            {"password": data.password}
+        )
+        
+        # Log the action (security best practice)
+        logger.info(f"Admin reset password for user: {user_id}")
+        
+        return {"success": True, "message": "Password updated successfully"}
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to reset password: {str(e)}")
         logger.error(f"Delete manager error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete manager: {str(e)}")
 
