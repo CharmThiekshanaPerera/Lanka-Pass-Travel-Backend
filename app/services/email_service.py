@@ -142,3 +142,139 @@ class EmailService:
         except Exception as e:
             logger.error(f"Error verifying Email OTP: {str(e)}")
             return False
+    @staticmethod
+    async def send_approval_credentials(email: str, password: str) -> bool:
+        """
+        Send an email to the vendor with their login credentials after approval.
+        """
+        try:
+            # Check if SendGrid is configured
+            if not settings.SENDGRID_API_KEY or not settings.SENDGRID_FROM_EMAIL:
+                logger.warning("SendGrid is not configured. Approval email not sent.")
+                return False
+
+            # Send via SendGrid API
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={
+                        "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "personalizations": [
+                            {
+                                "to": [{"email": email}],
+                                "subject": "Welcome to LankaPass - Your Vendor Account is Approved!"
+                            }
+                        ],
+                        "from": {"email": settings.SENDGRID_FROM_EMAIL, "name": "LankaPass Travel"},
+                        "content": [
+                            {
+                                "type": "text/plain",
+                                "value": f"Your vendor account on LankaPass has been approved! \n\nLogin Email: {email}\nTemporary Password: {password}\n\nPlease login and change your password immediately."
+                            },
+                            {
+                                "type": "text/html",
+                                "value": f"""
+                                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 600px; margin: auto;">
+                                    <h2 style="color: #0d9488;">Congratulations!</h2>
+                                    <p>Your vendor account on <strong>LankaPass Travel</strong> has been officially approved. You can now log in and manage your services.</p>
+                                    
+                                    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                        <p style="margin-top: 0;"><strong>Your Login Credentials:</strong></p>
+                                        <p style="margin-bottom: 5px;">Email: <span style="color: #4b5563;">{email}</span></p>
+                                        <p style="margin-bottom: 0;">Temporary Password: <span style="color: #4b5563; font-family: monospace; font-weight: bold;">{password}</span></p>
+                                    </div>
+                                    
+                                    <p>For security reasons, you will be required to <strong>change your password</strong> upon your first login.</p>
+                                    
+                                    <a href="https://lankapass.com/login" style="display: inline-block; background: #fbbf24; color: #fff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">Log In to Dashboard</a>
+                                    
+                                    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+                                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">Welcome to the LankaPass family!</p>
+                                </div>
+                                """
+                            }
+                        ]
+                    },
+                    timeout=10.0
+                )
+
+                if response.status_code in [200, 201, 202]:
+                    logger.info(f"Approval credentials sent to {email}.")
+                    return True
+                else:
+                    logger.error(f"SendGrid API error while sending credentials: {response.status_code} - {response.text}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Error sending approval credentials: {str(e)}")
+            return False
+
+    @staticmethod
+    async def send_password_reset_email(email: str, password: str) -> bool:
+        """
+        Send an email to the vendor with a temporary password after a forgot password request.
+        """
+        try:
+            if not settings.SENDGRID_API_KEY or not settings.SENDGRID_FROM_EMAIL:
+                logger.warning("SendGrid is not configured. Password reset email not sent.")
+                return False
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={
+                        "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "personalizations": [
+                            {
+                                "to": [{"email": email}],
+                                "subject": "LankaPass Password Reset"
+                            }
+                        ],
+                        "from": {"email": settings.SENDGRID_FROM_EMAIL, "name": "LankaPass Travel"},
+                        "content": [
+                            {
+                                "type": "text/plain",
+                                "value": f"A password reset was requested for your LankaPass account. \n\nTemporary Password: {password}\n\nPlease login and change your password immediately."
+                            },
+                            {
+                                "type": "text/html",
+                                "value": f"""
+                                <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 600px; margin: auto;">
+                                    <h2 style="color: #0d9488;">Password Reset Request</h2>
+                                    <p>A password reset was requested for your <strong>LankaPass Travel</strong> account. Use the temporary password below to sign in:</p>
+                                    
+                                    <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                                        <p style="margin-top: 0; color: #6b7280; font-size: 14px;">Temporary Password:</p>
+                                        <div style="font-family: monospace; font-size: 24px; font-weight: bold; color: #111827; letter-spacing: 2px;">{password}</div>
+                                    </div>
+                                    
+                                    <p>For security reasons, you will be required to <strong>change your password</strong> immediately upon login.</p>
+                                    
+                                    <p style="color: #6b7280; font-size: 14px;">If you did not request this reset, please contact support or ignore this email.</p>
+                                    
+                                    <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+                                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">LankaPass Travel Security Team</p>
+                                </div>
+                                """
+                            }
+                        ]
+                    },
+                    timeout=10.0
+                )
+
+                if response.status_code in [200, 201, 202]:
+                    logger.info(f"Password reset email sent to {email}.")
+                    return True
+                else:
+                    logger.error(f"SendGrid API error while sending reset email: {response.status_code} - {response.text}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Error sending password reset email: {str(e)}")
+            return False
