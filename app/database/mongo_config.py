@@ -131,7 +131,9 @@ async def ensure_indexes():
         messages_col = await get_chat_messages_collection()
         if messages_col is not None:
             # Index for fetching vendor's messages
-            await messages_col.create_index([("vendor_id", 1), ("created_at", 1)])
+            await messages_col.create_index([("vendor_id", 1), ("created_at", -1)])
+            # Standalone index for aggregation sorting
+            await messages_col.create_index([("created_at", -1)])
             # Index for unread count
             await messages_col.create_index([("sender", 1), ("read_at", 1)])
             logger.info("Chat message indexes ensured")

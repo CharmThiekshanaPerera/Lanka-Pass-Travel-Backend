@@ -196,6 +196,7 @@ class ChatService:
             
             # Aggregate to find latest message and unread count per vendor
             pipeline = [
+                {"$match": {"vendor_id": {"$ne": None}}}, # Filter out rogue messages without vendor_id
                 {"$sort": {"created_at": -1}}, # Sort messages by date descending
                 {
                     "$group": {
