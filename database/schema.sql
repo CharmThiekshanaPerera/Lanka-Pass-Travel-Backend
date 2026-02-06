@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS public.vendor_services (
     -- Service Details
     service_name VARCHAR(255) NOT NULL,
     service_category VARCHAR(100),
+    service_category_other TEXT,
     service_description TEXT, -- Main description used by backend
     short_description TEXT,   -- Optional short summary
     whats_included TEXT,
@@ -109,12 +110,29 @@ CREATE TABLE IF NOT EXISTS public.vendor_services (
     duration_value INTEGER,
     duration_unit VARCHAR(20),
     languages_offered TEXT[],
+    languages_other TEXT,
     group_size_min INTEGER,
     group_size_max INTEGER,
     daily_capacity INTEGER,
     operating_days TEXT[],
+    operating_hours_from TEXT,
+    operating_hours_from_period VARCHAR(10) DEFAULT 'AM',
+    operating_hours_to TEXT,
+    operating_hours_to_period VARCHAR(10) DEFAULT 'PM',
+    blackout_dates TEXT[],
+    blackout_holidays BOOLEAN DEFAULT FALSE,
+    blackout_weekends BOOLEAN DEFAULT FALSE,
     locations_covered TEXT[],
     image_urls TEXT[] DEFAULT ARRAY[]::TEXT[],
+    
+    -- Additional Info
+    advance_booking TEXT,
+    advance_booking_other TEXT,
+    not_suitable_for TEXT,
+    important_info TEXT,
+    cancellation_policy TEXT,
+    accessibility_info TEXT,
+    status VARCHAR(50) DEFAULT 'active',
     
     -- Pricing
     currency VARCHAR(10) DEFAULT 'USD',
