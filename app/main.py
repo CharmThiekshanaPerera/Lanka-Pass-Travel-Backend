@@ -22,14 +22,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Supabase
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_KEY")
+supabase_url = os.getenv("SUPABASE_URL", "").strip()
+supabase_key = os.getenv("SUPABASE_KEY", "").strip()
 print(f"BOOT: SUPABASE_URL={supabase_url}")
 if supabase_key:
     print(f"BOOT: SUPABASE_KEY starts with: {supabase_key[:15]}...")
 else:
     print("BOOT: SUPABASE_KEY is MISSING!")
+if not supabase_url or not supabase_key:
+    logger.error("CRITICAL: SUPABASE_URL or SUPABASE_KEY not set!")
+
 supabase: Client = create_client(supabase_url, supabase_key)
+# DEDICATED ADMIN CLIENT to avoid session pollution from auth.sign_in calls
+supabase_admin: Client = create_client(supabase_url, supabase_key)
 
 # Initialize FastAPI
 app = FastAPI(title="Lanka Pass Travel API", version="1.0.0")
@@ -89,27 +94,109 @@ async def require_staff(user: dict = Depends(get_current_user)):
     return user
 
 
+# pydantic models
+class LoginRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    username: Optional[EmailStr] = None
+    password: str
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str = "user"
+
+class CommissionUpdateRequest(BaseModel):
+    commission_percent: float
+
+class ManagerCreateRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class VendorStatusRequest(BaseModel):
+    status: str
+    status_reason: Optional[str] = None
+
+class ServiceSchema(BaseModel):
+    serviceName: str
+    serviceCategory: str
+    serviceDescription: Optional[str] = None
+    description: Optional[str] = None
+    shortDescription: Optional[str] = None
+    whatsIncluded: Optional[str] = None
+    whatsNotIncluded: Optional[str] = None
+    durationValue: Optional[int] = None
+    durationUnit: Optional[str] = None
+    languagesOffered: Optional[List[str]] = []
+    groupSizeMin: Optional[int] = None
+    groupSizeMax: Optional[int] = None
+    dailyCapacity: Optional[int] = None
+    operatingDays: Optional[List[str]] = []
+    locationsCovered: Optional[List[str]] = []
+    currency: str = "USD"
+    retailPrice: float
+    # New fields
+    operatingHoursFrom: Optional[str] = None
+    operatingHoursTo: Optional[str] = None
+    blackoutDates: Optional[List[str]] = []
+    blackoutHolidays: Optional[bool] = False
+    notSuitableFor: Optional[str] = None
+    importantInfo: Optional[str] = None
+    cancellationPolicy: Optional[str] = None
+    accessibilityInfo: Optional[str] = None
+    imageUrls: Optional[List[str]] = []
+
+class VendorRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    contactPerson: str
+    vendorType: Optional[str] = None
+    vendorTypeOther: Optional[str] = None
+    businessName: str
+    legalName: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    phoneVerified: Optional[bool] = False
+    operatingAreas: Optional[List[str]] = []
+    operatingAreas_other: Optional[str] = None
+    businessRegNumber: Optional[str] = None
+    businessAddress: str
+    taxId: Optional[str] = None
+    bankName: Optional[str] = None
+    bankNameOther: Optional[str] = None
+    accountHolderName: Optional[str] = None
+    accountNumber: Optional[str] = None
+    bankBranch: Optional[str] = None
+    # File URLs
+    regCertificateUrl: Optional[str] = None
+    nicPassportUrl: Optional[str] = None
+    tourismLicenseUrl: Optional[str] = None
+    logoUrl: Optional[str] = None
+    coverImageUrl: Optional[str] = None
+    galleryUrls: Optional[List[str]] = []
+    # Agreements
+    acceptTerms: bool = False
+    acceptCommission: bool = False
+    acceptCancellation: bool = False
+    grantRights: bool = False
+    confirmAccuracy: bool = False
+    # Payout prefs
+    payoutCycle: Optional[str] = None
+    payoutDate: Optional[str] = None
+    # Services
+    services: List[ServiceSchema] = []
+
 # Auth API
 @app.post("/api/auth/login")
-async def login(request: Request):
+async def login(data: LoginRequest):
     try:
-        # Try both form and json for robustness
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            data = await request.json()
-            email = data.get("email") or data.get("username")
-            password = data.get("password")
-        else:
-            form_data = await request.form()
-            email = form_data.get("username") or form_data.get("email")
-            password = form_data.get("password")
-        
-        if not email or not password:
+        email = data.email or data.username
+        if not email or not data.password:
              raise HTTPException(status_code=400, detail="Credentials required")
 
         auth_res = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
+            "email": str(email),
+            "password": data.password
         })
         
         user_id = auth_res.user.id
@@ -118,7 +205,6 @@ async def login(request: Request):
         user_name = auth_res.user.user_metadata.get("name", "") if auth_res.user.user_metadata else ""
 
         try:
-            # Try to get extended profile, but don't fail if RLS/Recursion occurs
             user_data = supabase.table("users").select("*").eq("id", user_id).execute()
             user_profile = user_data.data[0] if user_data.data else {
                 "id": user_id,
@@ -143,42 +229,36 @@ async def login(request: Request):
             "user": user_profile
         }
     except Exception as e:
-        logger.exception("Login failed with exception")
+        logger.exception("Login failed")
         raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
 
 @app.post("/api/auth/register")
-async def register(request: Request):
+async def register(data: RegisterRequest):
     try:
-        data = await request.json()
-        email = data.get("email")
-        password = data.get("password")
-        name = data.get("name")
-        role = data.get("role", "user")
+        role = data.role
         
-        # Use regular sign_up for non-admin roles
         if role in ["user", "vendor"]:
-            # Create auth user using sign_up
+            # Use the standard client for public registration
             auth_res = supabase.auth.sign_up({
-                "email": str(email),
-                "password": password,
+                "email": str(data.email),
+                "password": data.password,
                 "options": {
-                    "data": {"role": role, "name": name}
+                    "data": {"role": role, "name": data.name}
                 }
             })
             user_id = auth_res.user.id
             
-            # Create public user
             user_profile = {
                 "id": user_id,
-                "email": str(email),
-                "name": name,
+                "email": str(data.email),
+                "name": data.name,
                 "role": role,
                 "is_active": True
             }
-            supabase.table("users").insert(user_profile).execute()
+            # Use admin client to insert to ensure no RLS issues during initial creation
+            supabase_admin.table("users").insert(user_profile).execute()
             
-            # Sign in to get session
-            login_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            login_res = supabase.auth.sign_in_with_password({"email": str(data.email), "password": data.password})
             
             return {
                 "access_token": login_res.session.access_token,
@@ -186,27 +266,26 @@ async def register(request: Request):
                 "user": user_profile
             }
         else:
-            # For admin/manager roles, use admin API (requires service_role key)
-            auth_res = supabase.auth.admin.create_user({
-                "email": str(email),
-                "password": password,
+            # For staff roles, use admin client
+            auth_res = supabase_admin.auth.admin.create_user({
+                "email": str(data.email),
+                "password": data.password,
                 "email_confirm": True,
-                "user_metadata": {"role": role, "name": name}
+                "user_metadata": {"role": role, "name": data.name}
             })
             user_id = auth_res.user.id
             
-            # Create public user
             user_profile = {
                 "id": user_id,
-                "email": str(email),
-                "name": name,
+                "email": str(data.email),
+                "name": data.name,
                 "role": role,
                 "is_active": True
             }
-            supabase.table("users").insert(user_profile).execute()
+            supabase_admin.table("users").insert(user_profile).execute()
             
-            # Sign in
-            login_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            # Use standard client for login
+            login_res = supabase.auth.sign_in_with_password({"email": str(data.email), "password": data.password})
             
             return {
                 "access_token": login_res.session.access_token,
@@ -214,8 +293,17 @@ async def register(request: Request):
                 "user": user_profile
             }
     except Exception as e:
-        logger.exception("Registration failed with exception")
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"Registration failed for email {data.email} with role {data.role}: {error_msg}")
+        
+        if "User not allowed" in error_msg:
+             detail = f"Supabase Auth Error: 'User not allowed' for {data.email}. Please ensure your Service Role key is correct and 'Enable manual user confirmation' or other restrictions in Supabase are not blocking admin user creation."
+        elif "already registered" in error_msg.lower() or "unique constraint" in error_msg.lower():
+             detail = f"The email {data.email} is already registered."
+        else:
+             detail = f"Registration failed: {error_msg}"
+             
+        raise HTTPException(status_code=500, detail=detail)
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -225,8 +313,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 @app.get("/api/admin/dashboard", dependencies=[Depends(require_staff)])
 async def get_admin_dashboard():
     try:
-        vendors = supabase.table("vendors").select("status").execute()
-        users = supabase.table("users").select("role").execute()
+        # Use ADMIN client to ensure we see all data regardless of RLS pollution
+        vendors = supabase_admin.table("vendors").select("status").execute()
+        users = supabase_admin.table("users").select("role").execute()
         return {
             "stats": {
                 "total_vendors": len(vendors.data or []),
@@ -240,18 +329,22 @@ async def get_admin_dashboard():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/vendors", dependencies=[Depends(require_staff)])
-async def get_all_vendors():
+async def get_vendors_admin(status: Optional[str] = None):
     try:
-        vendors = supabase.table("vendors").select("*").execute()
-        return {"success": True, "vendors": vendors.data or []}
+        query = supabase_admin.table("vendors").select("*")
+        if status:
+            query = query.eq("status", status)
+        res = query.order("created_at", desc=True).execute()
+        return {"success": True, "vendors": res.data or []}
     except Exception as e:
+        logger.error(f"Fetch vendors admin error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_staff)])
 async def get_vendor_detail(vendor_id: str):
     try:
-        vendor_res = supabase.table("vendors").select("*").eq("id", vendor_id).single().execute()
-        services_res = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+        vendor_res = supabase_admin.table("vendors").select("*").eq("id", vendor_id).single().execute()
+        services_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
         return {
             "success": True,
             "vendor": vendor_res.data,
@@ -260,68 +353,103 @@ async def get_vendor_detail(vendor_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_staff)])
-async def update_vendor_status(vendor_id: str, request: Request):
-    data = await request.json()
-    res = supabase.table("vendors").update({
-        "status": data.get("status"),
-        "status_reason": data.get("status_reason")
+@app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_admin)])
+async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
+    res = supabase_admin.table("vendors").update({
+        "status": data.status,
+        "status_reason": data.status_reason
     }).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
+
+@app.patch("/api/admin/services/{service_id}/commission", dependencies=[Depends(require_admin)])
+async def update_service_commission(service_id: str, data: CommissionUpdateRequest):
+    try:
+        commission_percent = data.commission_percent
+        
+        if not (0 <= commission_percent <= 100):
+             raise HTTPException(status_code=400, detail="Commission must be a percentage between 0 and 100")
+
+        # Get current service details
+        service_res = supabase_admin.table("vendor_services").select("retail_price").eq("id", service_id).single().execute()
+        if not service_res.data:
+            raise HTTPException(status_code=404, detail="Service not found")
+            
+        retail_price = float(service_res.data["retail_price"] or 0)
+        
+        # Calculate
+        commission_amount = retail_price * (commission_percent / 100.0)
+        net_price = retail_price - commission_amount
+        
+        # Update
+        update_data = {
+            "commission": commission_amount,
+            "net_price": net_price
+        }
+        
+        res = supabase_admin.table("vendor_services").update(update_data).eq("id", service_id).execute()
+        
+        return {
+            "success": True, 
+            "service": res.data[0],
+            "calculation": {
+                "retail_price": retail_price,
+                "commission_percent": commission_percent,
+                "commission_amount": commission_amount,
+                "net_price": net_price
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Commission update error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Manager Management (Admin Only)
 @app.get("/api/admin/managers", dependencies=[Depends(require_admin)])
 async def get_managers():
     try:
-        users = supabase.table("users").select("*").eq("role", "manager").execute()
+        users = supabase_admin.table("users").select("*").eq("role", "manager").execute()
         return {"success": True, "managers": users.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/admin/managers", dependencies=[Depends(require_admin)])
-async def create_manager(request: Request):
+async def create_manager(data: ManagerCreateRequest):
     try:
-        data = await request.json()
-        email = data.get("email")
-        password = data.get("password")
-        name = data.get("name")
-        
-        # Create auth user
-        auth_res = supabase.auth.admin.create_user({
-            "email": str(email),
-            "password": password,
+        # Create auth user using ADMIN client
+        auth_res = supabase_admin.auth.admin.create_user({
+            "email": str(data.email),
+            "password": data.password,
             "email_confirm": True,
-            "user_metadata": {"role": "manager", "name": name}
+            "user_metadata": {"role": "manager", "name": data.name}
         })
         user_id = auth_res.user.id
         
         # Create public user
         user_profile = {
             "id": user_id,
-            "email": str(email),
-            "name": name,
+            "email": str(data.email),
+            "name": data.name,
             "role": "manager",
             "is_active": True
         }
-        supabase.table("users").insert(user_profile).execute()
+        supabase_admin.table("users").insert(user_profile).execute()
         
         return {"success": True, "manager": user_profile}
     except Exception as e:
         logger.error(f"Create manager error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to create manager: {str(e)}")
+        error_msg = str(e)
+        if "User already registered" in error_msg or "violates unique constraint" in error_msg:
+             raise HTTPException(status_code=400, detail="This email is already registered.")
+        if "Password should be at least" in error_msg:
+             raise HTTPException(status_code=400, detail="Password is too weak. " + error_msg)
+        raise HTTPException(status_code=500, detail=f"Failed to create manager: {error_msg}")
 
 @app.delete("/api/admin/managers/{user_id}", dependencies=[Depends(require_admin)])
 async def delete_manager(user_id: str):
     try:
-        # Delete from public users first (cascade should handle it if set up, but let's be safe)
-        # Actually deleting from auth.users usually cascades to public.users if configured in DB
-        # But supabase-py client mainly interacts with public schema.
-        # We need to use admin api to delete user from auth.
-        
-        res = supabase.auth.admin.delete_user(user_id)
-        # Also clean up public table if cascade isn't automatic (it is in schema.sql but...)
-        supabase.table("users").delete().eq("id", user_id).execute()
-        
+        supabase_admin.auth.admin.delete_user(user_id)
+        supabase_admin.table("users").delete().eq("id", user_id).execute()
         return {"success": True, "message": "Manager deleted"}
     except Exception as e:
         logger.error(f"Delete manager error: {str(e)}")
@@ -331,7 +459,6 @@ async def delete_manager(user_id: str):
 @app.get("/api/admin/export/vendors", dependencies=[Depends(require_staff)])
 async def export_vendors():
     try:
-        # Fetch all vendor data
         vendors = supabase.table("vendors").select("*").execute()
         
         output = io.StringIO()
@@ -370,17 +497,14 @@ async def upload_file(
     service_index: str = Form(None)
 ):
     try:
-        # Generate unique filename
         file_ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
         file_name = f"{file_type}_{uuid.uuid4()}.{file_ext}"
         bucket_name = "vendor-docs"
         
-        # Read file content
         content = await file.read()
         
-        # Upload to Supabase Storage
         try:
-            res = supabase.storage.from_(bucket_name).upload(
+            supabase_admin.storage.from_(bucket_name).upload(
                 path=file_name,
                 file=content,
                 file_options={"content-type": file.content_type}
@@ -388,215 +512,191 @@ async def upload_file(
         except Exception as upload_err:
             logger.error(f"Storage upload failed: {str(upload_err)}")
             if "Bucket not found" in str(upload_err):
-                 raise HTTPException(status_code=404, detail="Storage bucket 'vendor-docs' not found. Please create it in Supabase.")
-            raise HTTPException(status_code=500, detail=f"Failed to upload to storage: {str(upload_err)}")
+                 raise HTTPException(status_code=404, detail="Storage bucket 'vendor-docs' not found.")
+            raise HTTPException(status_code=500, detail=f"Failed to upload: {str(upload_err)}")
             
-        # Construct Public URL
-        project_url = os.getenv("SUPABASE_URL")
-        # Remove trailing slash if present
-        if project_url.endswith("/"):
-            project_url = project_url[:-1]
-            
+        project_url = os.getenv("SUPABASE_URL").rstrip("/")
         public_url = f"{project_url}/storage/v1/object/public/{bucket_name}/{file_name}"
         
-        # UPDATE DATABASE RECORD
-        # We update the vendor record directly because the frontend might not save the URL
         try:
             update_data = {}
-            
-            if file_type == "logo":
-                update_data["logo_url"] = public_url
-            elif file_type == "cover_image":
-                update_data["cover_image_url"] = public_url
-            elif file_type == "reg_certificate":
-                update_data["reg_certificate_url"] = public_url
-            elif file_type == "nic_passport":
-                update_data["nic_passport_url"] = public_url
-            elif file_type == "tourism_license":
-                update_data["tourism_license_url"] = public_url
+            if file_type == "logo": update_data["logo_url"] = public_url
+            elif file_type == "cover_image": update_data["cover_image_url"] = public_url
+            elif file_type == "reg_certificate": update_data["reg_certificate_url"] = public_url
+            elif file_type == "nic_passport": update_data["nic_passport_url"] = public_url
+            elif file_type == "tourism_license": update_data["tourism_license_url"] = public_url
             elif file_type == "gallery":
-                # For array, we need to fetch first or use postgres append
-                # Simple fetch-append-update for safety
-                current_vendor = supabase.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
-                current_urls = current_vendor.data.get("gallery_urls") or []
-                current_urls.append(public_url)
-                update_data["gallery_urls"] = current_urls
+                current_vendor = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).single().execute()
+                urls = current_vendor.data.get("gallery_urls") or []
+                urls.append(public_url)
+                update_data["gallery_urls"] = urls
+            elif file_type.startswith("service_") and service_index is not None:
+                idx = int(service_index)
+                srv_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+                if srv_res.data and len(srv_res.data) > idx:
+                    tid = srv_res.data[idx]["id"]
+                    imgs = srv_res.data[idx].get("image_urls") or []
+                    imgs.append(public_url)
+                    supabase_admin.table("vendor_services").update({"image_urls": imgs}).eq("id", tid).execute()
             
             if update_data:
-                supabase.table("vendors").update(update_data).eq("id", vendor_id).execute()
-                logger.info(f"Updated vendor {vendor_id} with {file_type} url: {public_url}")
-                
+                supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
         except Exception as db_err:
-            logger.error(f"Failed to update database with file URL: {str(db_err)}")
-            # We don't fail the request, just log it, as the file was uploaded
+            logger.error(f"DB update failed for file: {str(db_err)}")
         
         return {"success": True, "url": public_url}
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"File upload processing error: {str(e)}")
+        logger.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # Vendor API
 @app.post("/api/vendor/register", status_code=201)
-async def register_vendor(request: Request):
+async def register_vendor(data: VendorRegisterRequest):
     user_id = None
     try:
-        data = await request.json()
-        logger.info(f"Vendor registration started for email: {data.get('email')}")
+        logger.info(f"Vendor registration: {data.email}")
         
-        # 1. Create Auth User using Admin API (bypasses rate limits)
+        # 1. Auth User - Use ADMIN client
         try:
-            auth_res = supabase.auth.admin.create_user({
-                "email": data.get("email"),
-                "password": data.get("password"),
-                "email_confirm": True,  # Auto-confirm email
-                "user_metadata": {
-                    "role": "vendor", 
-                    "name": data.get("contactPerson")
-                }
+            auth_res = supabase_admin.auth.admin.create_user({
+                "email": str(data.email),
+                "password": data.password,
+                "email_confirm": True,
+                "user_metadata": {"role": "vendor", "name": data.contactPerson}
             })
             user_id = auth_res.user.id
-            logger.info(f"Auth user created via Admin API with ID: {user_id}")
         except Exception as e:
-            logger.error(f"Auth user creation failed: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Failed to create auth user: {str(e)}")
+            logger.error(f"Auth creation failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Auth creation failed: {str(e)}")
         
-        # 2. Create Public User
+        # 2. Public User
         try:
-            user_insert_result = supabase.table("users").insert({
+            supabase_admin.table("users").insert({
                 "id": user_id,
-                "email": data.get("email"),
-                "name": data.get("contactPerson"),
+                "email": str(data.email),
+                "name": data.contactPerson,
                 "role": "vendor"
             }).execute()
-            logger.info(f"Public user created: {user_insert_result.data}")
         except Exception as e:
-            logger.error(f"Public user creation failed: {str(e)}")
-            # Try to clean up auth user
-            try:
-                supabase.auth.admin.delete_user(user_id)
-            except:
-                pass
-            raise HTTPException(status_code=500, detail=f"Failed to create user profile: {str(e)}")
+            logger.error(f"Profile creation failed: {str(e)}")
+            supabase_admin.auth.admin.delete_user(user_id)
+            raise HTTPException(status_code=500, detail=f"User profile failed: {str(e)}")
         
-        # 3. Create Vendor Profile
+        # 3. Vendor Profile
         try:
             db_vendor = {
                 "user_id": user_id,
-                "vendor_type": data.get("vendorType"),
-                "vendor_type_other": data.get("vendorTypeOther"),
-                "business_name": data.get("businessName"),
-                "legal_name": data.get("legalName"),
-                "contact_person": data.get("contactPerson"),
-                "email": data.get("email"),
-                "phone_number": data.get("phoneNumber"),
-                "phone_verified": data.get("phoneVerified", False),
-                "operating_areas": data.get("operatingAreas"),
-                "operating_areas_other": data.get("operatingAreasOther"),
-                "business_reg_number": data.get("businessRegNumber"),
-                "business_address": data.get("businessAddress"),
-                "tax_id": data.get("taxId"),
-                "bank_name": data.get("bankName"),
-                "bank_name_other": data.get("bankNameOther"),
-                "account_holder_name": data.get("accountHolderName"),
-                "account_number": data.get("accountNumber"),
-                "bank_branch": data.get("bankBranch"),
-                # File URLs
-                "reg_certificate_url": data.get("regCertificateUrl"),
-                "nic_passport_url": data.get("nicPassportUrl"),
-                "tourism_license_url": data.get("tourismLicenseUrl"),
-                "logo_url": data.get("logoUrl"),
-                "cover_image_url": data.get("coverImageUrl"),
-                "gallery_urls": data.get("galleryUrls", []),
+                "vendor_type": data.vendorType,
+                "vendor_type_other": data.vendorTypeOther,
+                "business_name": data.businessName,
+                "legal_name": data.legalName,
+                "contact_person": data.contactPerson,
+                "email": str(data.email),
+                "phone_number": data.phoneNumber,
+                "phone_verified": data.phoneVerified,
+                "operating_areas": data.operatingAreas,
+                "operating_areas_other": data.operatingAreas_other,
+                "business_reg_number": data.businessRegNumber,
+                "business_address": data.businessAddress,
+                "tax_id": data.taxId,
+                "bank_name": data.bankName,
+                "bank_name_other": data.bankNameOther,
+                "account_holder_name": data.accountHolderName,
+                "account_number": data.accountNumber,
+                "bank_branch": data.bankBranch,
+                # URLs
+                "reg_certificate_url": data.regCertificateUrl,
+                "nic_passport_url": data.nicPassportUrl,
+                "tourism_license_url": data.tourismLicenseUrl,
+                "logo_url": data.logoUrl,
+                "cover_image_url": data.coverImageUrl,
+                "gallery_urls": data.galleryUrls,
+                # Payout
+                "payout_cycle": data.payoutCycle,
+                "payout_date": data.payoutDate,
                 # Agreements
-                "accept_terms": data.get("acceptTerms", False),
-                "accept_commission": data.get("acceptCommission", False),
-                "accept_cancellation": data.get("acceptCancellation", False),
-                "grant_rights": data.get("grantRights", False),
-                "confirm_accuracy": data.get("confirmAccuracy", False),
+                "accept_terms": data.acceptTerms,
+                "accept_commission": data.acceptCommission,
+                "accept_cancellation": data.acceptCancellation,
+                "grant_rights": data.grantRights,
+                "confirm_accuracy": data.confirmAccuracy,
                 "status": "pending"
             }
-            
-            logger.info(f"Attempting to create vendor profile for user_id: {user_id}")
-            res = supabase.table("vendors").insert(db_vendor).execute()
+            res = supabase_admin.table("vendors").insert(db_vendor).execute()
             vendor_id = res.data[0]["id"]
-            logger.info(f"Vendor profile created with ID: {vendor_id}")
         except Exception as e:
-            logger.error(f"Vendor profile creation failed: {str(e)}")
-            # Try to clean up
-            try:
-                supabase.table("users").delete().eq("id", user_id).execute()
-                supabase.auth.admin.delete_user(user_id)
-            except:
-                pass
-            raise HTTPException(status_code=500, detail=f"Failed to create vendor profile: {str(e)}")
+            logger.error(f"Vendor profile error: {str(e)}")
+            supabase_admin.table("users").delete().eq("id", user_id).execute()
+            supabase_admin.auth.admin.delete_user(user_id)
+            raise HTTPException(status_code=500, detail=f"Vendor profile failed: {str(e)}")
         
-        # 4. Create Services
-        try:
-            services = data.get("services", [])
-            logger.info(f"Creating {len(services)} services for vendor {vendor_id}")
-            for s in services:
+        # 4. Services
+        for s in data.services:
+            try:
                 db_service = {
                     "vendor_id": vendor_id,
-                    "service_name": s.get("serviceName"),
-                    "service_description": s.get("serviceDescription"),
-                    "currency": s.get("currency"),
-                    "retail_price": s.get("retailPrice"),
-                    "commission": s.get("commission"),
-                    "net_price": s.get("netPrice")
+                    "service_name": s.serviceName,
+                    "service_category": s.serviceCategory,
+                    "service_description": s.serviceDescription or s.description,
+                    "short_description": s.shortDescription,
+                    "whats_included": s.whatsIncluded,
+                    "whats_not_included": s.whatsNotIncluded,
+                    "duration_value": s.durationValue,
+                    "duration_unit": s.durationUnit,
+                    "languages_offered": s.languagesOffered,
+                    "group_size_min": s.groupSizeMin,
+                    "group_size_max": s.groupSizeMax,
+                    "daily_capacity": s.dailyCapacity, # Fixed Typo
+                    "operating_days": s.operatingDays,
+                    "locations_covered": s.locationsCovered,
+                    "currency": s.currency,
+                    "retail_price": s.retailPrice,
+                    "commission": 0,
+                    "net_price": s.retailPrice,
+                    # New fields
+                    "operating_hours_from": s.operatingHoursFrom,
+                    "operating_hours_to": s.operatingHoursTo,
+                    "blackout_dates": s.blackoutDates,
+                    "blackout_holidays": s.blackoutHolidays,
+                    "not_suitable_for": s.notSuitableFor,
+                    "important_info": s.importantInfo,
+                    "cancellation_policy": s.cancellationPolicy,
+                    "accessibility_info": s.accessibilityInfo,
+                    "image_urls": s.imageUrls
                 }
-                supabase.table("vendor_services").insert(db_service).execute()
-            logger.info(f"All services created successfully")
-        except Exception as e:
-            logger.error(f"Service creation failed: {str(e)}")
-            # Services are optional, so we don't fail the entire registration
-            logger.warning("Continuing despite service creation failure")
-            
-        logger.info(f"Vendor registration completed successfully. Vendor ID: {vendor_id}")
+                supabase_admin.table("vendor_services").insert(db_service).execute()
+            except Exception as se:
+                logger.error(f"Service insert error for {s.serviceName}: {str(se)}")
+                # Re-raise to ensure we don't return success if services fail
+                raise HTTPException(status_code=500, detail=f"Service registration failed for {s.serviceName}: {str(se)}")
+                
         return {"success": True, "vendor_id": vendor_id}
-        
-    except HTTPException:
-        raise
+    except HTTPException: raise
     except Exception as e:
-        logger.error(f"Vendor registration error: {str(e)}")
+        logger.exception("Vendor registration exception")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/vendor/profile")
 async def get_vendor_profile(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "vendor":
         raise HTTPException(status_code=403, detail="Vendor access required")
-    
     try:
-        vendor_res = supabase.table("vendors").select("*").eq("user_id", current_user["id"]).single().execute()
-        if not vendor_res.data:
-             raise HTTPException(status_code=404, detail="Vendor profile not found")
-        
-        vendor_id = vendor_res.data["id"]
-        services_res = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
-        
-        return {
-            "success": True,
-            "vendor": vendor_res.data,
-            "services": services_res.data or []
-        }
+        # Use ADMIN client to bypass RLS issues for the authorized user
+        vendor_res = supabase_admin.table("vendors").select("*").eq("user_id", current_user["id"]).single().execute()
+        if not vendor_res.data: raise HTTPException(status_code=404, detail="Vendor profile not found")
+        v_id = vendor_res.data["id"]
+        s_res = supabase_admin.table("vendor_services").select("*").eq("vendor_id", v_id).execute()
+        return {"success": True, "vendor": vendor_res.data, "services": s_res.data or []}
     except Exception as e:
-        logger.error(f"Profile fetch error: {str(e)}")
+        logger.error(f"Get vendor profile error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/vendor/stats")
 async def get_vendor_stats(current_user: dict = Depends(get_current_user)):
-    # Mock stats for now, can be expanded with real booking data later
-    return {
-        "success": True,
-        "stats": {
-            "total_bookings": 0,
-            "pending_bookings": 0,
-            "total_earnings": 0,
-            "active_services": 0
-        }
-    }
+    return {"success": True, "stats": {"total_bookings": 0, "pending_bookings": 0, "total_earnings": 0, "active_services": 0}}
+
+# Removed redundant get_vendors endpoint
 
 if __name__ == "__main__":
     import uvicorn

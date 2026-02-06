@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
+# DEDICATED ADMIN CLIENT to avoid session pollution from auth.sign_in calls
+supabase_admin: Client = create_client(supabase_url, supabase_key)
 
 # Initialize FastAPI
 app = FastAPI(title="Vendor Registration API")
@@ -158,8 +160,8 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
     try:
         logger.info(f"Starting vendor registration for: {vendor_data.email}")
         
-        # 1. Check if email already exists in users table
-        existing_user = supabase.table("users").select("*").eq("email", vendor_data.email).execute()
+        # 1. Check if email already exists in users table - Use admin client for consistency
+        existing_user = supabase_admin.table("users").select("*").eq("email", vendor_data.email).execute()
         
         user_id = None
         if existing_user.data:
@@ -170,7 +172,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
             # This helps if previous test runs failed halfway
             logger.info(f"Checking if user exists in Supabase Auth: {vendor_data.email}")
             try:
-                auth_list_res = supabase.auth.admin.list_users()
+                auth_list_res = supabase_admin.auth.admin.list_users()
                 # Handle different return formats (list vs object with .users)
                 users_to_check = auth_list_res.users if hasattr(auth_list_res, 'users') else auth_list_res
                 
@@ -198,7 +200,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
                 logger.info(f"Creating auth user via Admin API for: {admin_user_params['email']}")
                 
                 try:
-                    auth_response = supabase.auth.admin.create_user(admin_user_params)
+                    auth_response = supabase_admin.auth.admin.create_user(admin_user_params)
                     if not auth_response.user:
                         raise Exception("Auth user creation returned no user object")
                     user_id = auth_response.user.id
@@ -229,15 +231,15 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
             
             try:
                 # Check if we need to insert into users table (in case it wasn't there)
-                check_user = supabase.table("users").select("id").eq("id", user_id).execute()
+                check_user = supabase_admin.table("users").select("id").eq("id", user_id).execute()
                 if not check_user.data:
-                    supabase.table("users").insert(user_record).execute()
+                    supabase_admin.table("users").insert(user_record).execute()
                     logger.info(f"Inserted user record into users table: {user_id}")
             except Exception as e:
                 logger.warning(f"Note: Users table insertion skipped or failed (might already exist): {e}")
         
         # 2. Check if vendor profile already exists
-        existing_vendor = supabase.table("vendors").select("*").eq("user_id", user_id).execute()
+        existing_vendor = supabase_admin.table("vendors").select("*").eq("user_id", user_id).execute()
         
         if existing_vendor.data:
             raise HTTPException(
@@ -274,7 +276,7 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
             "status": "pending"
         }
         
-        vendor_result = supabase.table("vendors").insert(vendor_profile).execute()
+        vendor_result = supabase_admin.table("vendors").insert(vendor_profile).execute()
         
         if not vendor_result.data:
             raise HTTPException(
@@ -310,8 +312,12 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
                 "accessibility_info": service.accessibilityInfo
             }
             
-            service_result = supabase.table("vendor_services").insert(service_record).execute()
-            logger.info(f"Created service {index + 1} for vendor {vendor_id}")
+            try:
+                service_result = supabase_admin.table("vendor_services").insert(service_record).execute()
+                logger.info(f"Created service {index + 1} for vendor {vendor_id}")
+            except Exception as se:
+                logger.error(f"Failed to create service {index + 1}: {str(se)}")
+                raise HTTPException(status_code=500, detail=f"Service creation failed: {str(se)}")
         
         # 5. Send welcome email (placeholder - implement your email service)
         # send_welcome_email(vendor_data.email, vendor_data.contactPerson)
@@ -375,16 +381,16 @@ async def upload_vendor_file(
             
             if file_type in column_map:
                 update_data = {column_map[file_type]: public_url}
-                supabase.table("vendors").update(update_data).eq("id", vendor_id).execute()
+                supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
         
         elif file_type == 'gallery':
             # Get current gallery URLs
-            vendor_data = supabase.table("vendors").select("gallery_urls").eq("id", vendor_id).execute()
+            vendor_data = supabase_admin.table("vendors").select("gallery_urls").eq("id", vendor_id).execute()
             current_gallery = vendor_data.data[0]["gallery_urls"] if vendor_data.data else []
             
             # Add new URL to gallery
             updated_gallery = current_gallery + [public_url] if current_gallery else [public_url]
-            supabase.table("vendors").update({"gallery_urls": updated_gallery}).eq("id", vendor_id).execute()
+            supabase_admin.table("vendors").update({"gallery_urls": updated_gallery}).eq("id", vendor_id).execute()
         
         elif file_type.startswith('service_'):
             # Handle service images
@@ -394,8 +400,8 @@ async def upload_vendor_file(
                     detail="service_index is required for service images"
                 )
             
-            # Get service for this vendor
-            services_data = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+            # Get service for this vendor - Use admin client
+            services_data = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
             
             if services_data.data and len(services_data.data) > service_index:
                 service_id = services_data.data[service_index]["id"]
@@ -403,7 +409,7 @@ async def upload_vendor_file(
                 
                 # Add new image URL
                 updated_images = current_images + [public_url] if current_images else [public_url]
-                supabase.table("vendor_services").update({"image_urls": updated_images}).eq("id", service_id).execute()
+                supabase_admin.table("vendor_services").update({"image_urls": updated_images}).eq("id", service_id).execute()
         
         return {
             "success": True,
@@ -424,8 +430,8 @@ async def get_vendor(vendor_id: str):
     Get vendor details by ID
     """
     try:
-        # Get vendor data
-        vendor_data = supabase.table("vendors").select("*").eq("id", vendor_id).execute()
+        # Get vendor data using admin client
+        vendor_data = supabase_admin.table("vendors").select("*").eq("id", vendor_id).execute()
         
         if not vendor_data.data:
             raise HTTPException(
@@ -434,7 +440,7 @@ async def get_vendor(vendor_id: str):
             )
         
         # Get vendor services
-        services_data = supabase.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
+        services_data = supabase_admin.table("vendor_services").select("*").eq("vendor_id", vendor_id).execute()
         
         return {
             "success": True,
@@ -460,7 +466,7 @@ async def get_vendors(
     Get all vendors with optional filtering
     """
     try:
-        query = supabase.table("vendors").select("*")
+        query = supabase_admin.table("vendors").select("*")
         
         if status:
             query = query.eq("status", status)
@@ -504,7 +510,7 @@ async def update_vendor_status(
         if reason:
             update_data["status_reason"] = reason
         
-        result = supabase.table("vendors").update(update_data).eq("id", vendor_id).execute()
+        res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
         
         if not result.data:
             raise HTTPException(
@@ -551,8 +557,8 @@ async def login(login_data: LoginRequest):
                 detail="Invalid credentials"
             )
         
-        # Get user details from public.users table
-        user_data = supabase.table("users").select("*").eq("id", auth_response.user.id).execute()
+        # Get user details from public.users table using admin client
+        user_data = supabase_admin.table("users").select("*").eq("id", auth_response.user.id).execute()
         user_profile = user_data.data[0] if user_data.data else {
             "id": auth_response.user.id,
             "email": auth_response.user.email,
