@@ -209,6 +209,29 @@ class VendorStatusRequest(BaseModel):
     admin_notes: Optional[str] = None
     is_public: Optional[bool] = None
 
+class PasswordResetRequest(BaseModel):
+    password: str
+
+class VendorProfileUpdate(BaseModel):
+    business_name: Optional[str] = None
+    vendor_type: Optional[str] = None
+    contact_person: Optional[str] = None
+    phone_number: Optional[str] = None
+    website: Optional[str] = None
+    business_address: Optional[str] = None
+    operating_areas: Optional[list] = None
+    email: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_holder_name: Optional[str] = None
+    account_number: Optional[str] = None
+    bank_branch: Optional[str] = None
+    payout_frequency: Optional[str] = None
+    payout_cycle: Optional[str] = None
+    payout_date: Optional[str] = None
+    reg_certificate_url: Optional[str] = None
+    nic_passport_url: Optional[str] = None
+    tourism_license_url: Optional[str] = None
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
@@ -613,6 +636,47 @@ async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
     res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
 
+@app.patch("/api/admin/vendors/{vendor_id}/profile", dependencies=[Depends(require_staff)])
+async def update_vendor_profile(vendor_id: str, data: VendorProfileUpdate):
+    update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    if "email" in update_data:
+        new_email = update_data["email"]
+        # Duplicate check across all vendors
+        dup_check = supabase_admin.table("vendors").select("id").eq("email", new_email).neq("id", vendor_id).execute()
+        if dup_check.data and len(dup_check.data) > 0:
+            raise HTTPException(status_code=400, detail="Use another email ID")
+
+        try:
+            # 1. Get user_id for this vendor
+            vendor_data_res = supabase_admin.table("vendors").select("user_id").eq("id", vendor_id).single().execute()
+            if not vendor_data_res.data:
+                raise HTTPException(status_code=404, detail="Vendor not found")
+            user_id = vendor_data_res.data["user_id"]
+
+            # 2. Update Supabase Auth email
+            supabase_admin.auth.admin.update_user_by_id(user_id, {"email": new_email})
+            
+            # 3. Update public.users table email
+            supabase_admin.table("users").update({"email": new_email}).eq("id", user_id).execute()
+            
+            # 4. Update public.vendors table email (will be handled by the final update below if we don't pop it, but let's be explicit)
+            # Actually, the update_data already contains "email", so line 647 will update the vendors table.
+            logger.info(f"Email updated for vendor {vendor_id} to {new_email}")
+        except Exception as auth_err:
+            logger.error(f"Failed to sync email to auth/users: {str(auth_err)}")
+            raise HTTPException(status_code=500, detail=f"Email update failed: {str(auth_err)}")
+
+    try:
+        res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+        return {"success": True, "vendor": res.data[0]}
+    except Exception as e:
+        logger.error(f"Update vendor profile error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.patch("/api/vendor/services/{service_id}/status")
 async def update_service_status(
     service_id: str,
@@ -737,6 +801,26 @@ async def delete_manager(user_id: str):
         supabase_admin.table("users").delete().eq("id", user_id).execute()
         return {"success": True, "message": "Manager deleted"}
     except Exception as e:
+        logger.error(f"Delete manager error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/admin/users/{user_id}/password", dependencies=[Depends(require_admin)])
+async def reset_user_password(user_id: str, data: PasswordResetRequest):
+    """Reset any user's password (Admin only)"""
+    try:
+        # Update supabase auth password
+        supabase_admin.auth.admin.update_user_by_id(
+            user_id, 
+            {"password": data.password}
+        )
+        
+        # Log the action (security best practice)
+        logger.info(f"Admin reset password for user: {user_id}")
+        
+        return {"success": True, "message": "Password updated successfully"}
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to reset password: {str(e)}")
         logger.error(f"Delete manager error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete manager: {str(e)}")
 
