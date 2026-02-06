@@ -6,6 +6,8 @@ from enum import Enum
 class VendorStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
+    ACTIVE = "active"
+    FREEZE = "freeze"
     REJECTED = "rejected"
     SUSPENDED = "suspended"
 
@@ -17,6 +19,8 @@ class VendorBase(BaseModel):
     address: str
     tax_id: Optional[str] = None
     business_registration_number: Optional[str] = None
+    admin_notes: Optional[str] = None
+    status_reason: Optional[str] = None
 
 class VendorCreate(VendorBase):
     user_id: str
@@ -30,6 +34,8 @@ class VendorUpdate(BaseModel):
     tax_id: Optional[str] = None
     business_registration_number: Optional[str] = None
     status: Optional[VendorStatus] = None
+    admin_notes: Optional[str] = None
+    status_reason: Optional[str] = None
 
 class VendorInDB(VendorBase):
     id: str

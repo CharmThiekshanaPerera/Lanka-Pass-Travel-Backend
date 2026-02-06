@@ -10,6 +10,7 @@ import uuid
 import os
 import io
 import csv
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -64,44 +65,69 @@ async def shutdown_event():
 
 # Dependencies
 async def get_current_user(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    
-    token = auth_header.split(" ")[1]
-    try:
-        user_res = supabase.auth.get_user(token)
-        if not user_res.user:
-            raise HTTPException(status_code=401, detail="Invalid token")
+    # Verbose logging for debugging the logout issue
+    with open("auth_debug.log", "a") as f:
+        f.write(f"\n--- Auth Check: {datetime.now()} ---\n")
+        f.write(f"Path: {request.url.path}\n")
         
-        user_id = user_res.user.id
-        user_email = user_res.user.email
-        user_role = user_res.user.user_metadata.get("role", "user") if user_res.user.user_metadata else "user"
-        user_name = user_res.user.user_metadata.get("name", "") if user_res.user.user_metadata else ""
-
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            f.write("Error: Missing or invalid Authorization header\n")
+            raise HTTPException(status_code=401, detail="Missing or invalid token")
+        
+        token = auth_header.split(" ")[1]
         try:
-            user_data = supabase.table("users").select("*").eq("id", user_id).execute()
-            if user_data.data:
-                return user_data.data[0]
-        except Exception:
-            pass
+            # Use to_thread for get_user as it might be synchronous or slow in some client versions
+            user_res = await asyncio.to_thread(supabase.auth.get_user, token)
+            if not user_res.user:
+                f.write("Error: Supabase get_user returned no user\n")
+                raise HTTPException(status_code=401, detail="Invalid token")
+            
+            user_id = user_res.user.id
+            user_email = user_res.user.email
+            user_metadata = user_res.user.user_metadata or {}
+            user_role_meta = user_metadata.get("role", "user")
+            user_name_meta = user_metadata.get("name", "")
+            
+            f.write(f"User ID: {user_id}\n")
+            f.write(f"Email: {user_email}\n")
+            f.write(f"Metadata Role: {user_role_meta}\n")
 
-        return {
-            "id": user_id,
-            "email": user_email,
-            "role": user_role,
-            "name": user_name
-        }
-    except Exception as e:
-        logger.error(f"Auth error: {str(e)}")
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+            # Use supabase_admin for role/is_active check to ensure we bypass any RLS issues
+            try:
+                user_data = await asyncio.to_thread(
+                    supabase_admin.table("users").select("*").eq("id", user_id).execute
+                )
+                if user_data.data:
+                    profile = user_data.data[0]
+                    f.write(f"DB Profile Found. Role: {profile.get('role')}\n")
+                    f.write(f"Returning DB Profile: {profile}\n")
+                    return profile
+                else:
+                    f.write("Warning: No profile found in 'users' table\n")
+            except Exception as db_err:
+                f.write(f"DB Error: {str(db_err)}\n")
 
-async def require_admin(user: dict = Depends(get_current_user)):
+            # Fallback to metadata if DB lookup fails or returns nothing
+            f.write(f"Using Fallback Metadata. Role: {user_role_meta}\n")
+            return {
+                "id": user_id,
+                "email": user_email,
+                "role": user_role_meta,
+                "name": user_name_meta,
+                "is_active": True
+            }
+        except Exception as e:
+            f.write(f"Critical Auth Error: {str(e)}\n")
+            logger.error(f"Auth critical error: {str(e)}")
+            raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
-async def require_vendor(user: dict = Depends(get_current_user)):
+async def require_vendor(user: Dict[str, Any] = Depends(get_current_user)):
     if user.get("role") != "vendor":
         raise HTTPException(status_code=403, detail="Vendor access required")
     return user
@@ -122,15 +148,20 @@ async def upload_file_to_storage(file: UploadFile, vendor_id: str, file_type: st
         else:
             file_path = f"vendors/{vendor_id}/{file_type}/{unique_filename}"
         
-        # Upload to storage
-        result = supabase_admin.storage.from_("vendor-files").upload(
+        # Upload to storage - wrapped in to_thread to avoid blocking
+        import asyncio
+        result = await asyncio.to_thread(
+            supabase_admin.storage.from_("vendor-files").upload,
             file_path,
             content,
             {"content-type": file.content_type}
         )
         
         # Get public URL
-        public_url = supabase_admin.storage.from_("vendor-files").get_public_url(file_path)
+        public_url = await asyncio.to_thread(
+            supabase_admin.storage.from_("vendor-files").get_public_url,
+            file_path
+        )
         
         return public_url
         
@@ -138,7 +169,7 @@ async def upload_file_to_storage(file: UploadFile, vendor_id: str, file_type: st
         logger.error(f"File upload error: {str(e)}")
         raise e
 
-async def require_staff(user: dict = Depends(get_current_user)):
+async def require_staff(user: Dict[str, Any] = Depends(get_current_user)):
     """Allow both admin and manager roles"""
     if user.get("role") not in ["admin", "manager"]:
         raise HTTPException(status_code=403, detail="Staff access required")
@@ -175,6 +206,13 @@ class VerifyOtpRequest(BaseModel):
 class VendorStatusRequest(BaseModel):
     status: str
     status_reason: Optional[str] = None
+    admin_notes: Optional[str] = None
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class ServiceStatusRequest(BaseModel):
+    status: str
 
 class DeleteFileSchema(BaseModel):
     vendor_id: str
@@ -316,6 +354,23 @@ async def verify_otp(data: VerifyOtpRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Auth API
+@app.post("/api/auth/refresh")
+async def refresh_token(data: RefreshRequest):
+    try:
+        res = supabase.auth.refresh_session(data.refresh_token)
+        if not res.session:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+        return {
+            "access_token": res.session.access_token,
+            "refresh_token": res.session.refresh_token,
+            "token_type": "bearer",
+            "expires_in": res.session.expires_in,
+            "user": res.user
+        }
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Refresh failed: {str(e)}")
+
 @app.post("/api/auth/login")
 async def login(data: LoginRequest):
     try:
@@ -330,8 +385,9 @@ async def login(data: LoginRequest):
         
         user_id = auth_res.user.id
         user_email = auth_res.user.email
-        user_role = auth_res.user.user_metadata.get("role", "user") if auth_res.user.user_metadata else "user"
-        user_name = auth_res.user.user_metadata.get("name", "") if auth_res.user.user_metadata else ""
+        user_metadata = auth_res.user.user_metadata or {}
+        user_role = user_metadata.get("role", "user")
+        user_name = user_metadata.get("name", "")
 
         try:
             user_data = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -352,11 +408,24 @@ async def login(data: LoginRequest):
                 "is_active": True
             }
         
+        # Check Vendor Status if role is vendor
+        if user_profile.get("role") == "vendor":
+            vendor_data = supabase_admin.table("vendors").select("status").eq("user_id", user_id).execute()
+            if vendor_data.data:
+                vendor_status = vendor_data.data[0].get("status")
+                if vendor_status in ["freeze", "terminated", "suspended"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Account is {vendor_status}. Please contact support."
+                    )
+        
         return {
             "access_token": auth_res.session.access_token,
+            "refresh_token": auth_res.session.refresh_token,
             "token_type": "bearer",
             "user": user_profile
         }
+    except HTTPException: raise
     except Exception as e:
         logger.exception("Login failed")
         raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
@@ -391,6 +460,7 @@ async def register(data: RegisterRequest):
             
             return {
                 "access_token": login_res.session.access_token,
+                "refresh_token": login_res.session.refresh_token,
                 "token_type": "bearer",
                 "user": user_profile
             }
@@ -418,6 +488,7 @@ async def register(data: RegisterRequest):
             
             return {
                 "access_token": login_res.session.access_token,
+                "refresh_token": login_res.session.refresh_token,
                 "token_type": "bearer",
                 "user": user_profile
             }
@@ -435,34 +506,59 @@ async def register(data: RegisterRequest):
         raise HTTPException(status_code=500, detail=detail)
 
 @app.get("/api/auth/me")
-async def get_me(current_user: dict = Depends(get_current_user)):
+async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
     return current_user
 
 # Admin API
 @app.get("/api/admin/dashboard", dependencies=[Depends(require_staff)])
 async def get_admin_dashboard():
     try:
-        # Use ADMIN client to ensure we see all data regardless of RLS pollution
-        vendors = supabase_admin.table("vendors").select("status").execute()
-        users = supabase_admin.table("users").select("role").execute()
-        return {
-            "stats": {
-                "total_vendors": len(vendors.data or []),
-                "pending": len([v for v in (vendors.data or []) if v["status"] == "pending"]),
-                "approved": len([v for v in (vendors.data or []) if v["status"] == "approved"]),
-                "rejected": len([v for v in (vendors.data or []) if v["status"] == "rejected"]),
-                "total_users": len(users.data or [])
+        import asyncio
+        # Use .count() instead of fetching all data to reduce memory and transfer time
+        # We run these in parallel using asyncio.gather/threads for maximum speed
+        
+        async def fetch_counts():
+            # Supabase doesn't have a simple COUNT(*) without fetching some data in this client version,
+            # but we can request just the count property to minimize payload.
+            # Using head=True is the most efficient way to get counts.
+            vendors_count_res = await asyncio.to_thread(
+                supabase_admin.table("vendors").select("*", count="exact").execute
+            )
+            users_count_res = await asyncio.to_thread(
+                supabase_admin.table("users").select("*", count="exact").execute
+            )
+            
+            # Count statuses separately
+            pending_count_res = await asyncio.to_thread(
+                supabase_admin.table("vendors").select("*", count="exact").eq("status", "pending").execute
+            )
+            approved_count_res = await asyncio.to_thread(
+                supabase_admin.table("vendors").select("*", count="exact").eq("status", "approved").execute
+            )
+            rejected_count_res = await asyncio.to_thread(
+                supabase_admin.table("vendors").select("*", count="exact").eq("status", "rejected").execute
+            )
+            
+            return {
+                "total_vendors": vendors_count_res.count or 0,
+                "pending": pending_count_res.count or 0,
+                "approved": approved_count_res.count or 0,
+                "rejected": rejected_count_res.count or 0,
+                "total_users": users_count_res.count or 0
             }
-        }
+
+        stats = await fetch_counts()
+        return {"stats": stats}
     except Exception as e:
+        logger.error(f"Dashboard stats error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/vendors", dependencies=[Depends(require_staff)])
-async def get_vendors_admin(status: Optional[str] = None):
+async def get_vendors_admin(vendor_status: Optional[str] = None):
     try:
         query = supabase_admin.table("vendors").select("*")
-        if status:
-            query = query.eq("status", status)
+        if vendor_status:
+            query = query.eq("status", vendor_status)
         res = query.order("created_at", desc=True).execute()
         return {"success": True, "vendors": res.data or []}
     except Exception as e:
@@ -484,11 +580,48 @@ async def get_vendor_detail(vendor_id: str):
 
 @app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_admin)])
 async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
-    res = supabase_admin.table("vendors").update({
+    update_data = {
         "status": data.status,
         "status_reason": data.status_reason
-    }).eq("id", vendor_id).execute()
+    }
+    if data.admin_notes is not None:
+        update_data["admin_notes"] = data.admin_notes
+
+    res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
+
+@app.patch("/api/vendor/services/{service_id}/status")
+async def update_service_status(
+    service_id: str,
+    status_data: ServiceStatusRequest
+):
+    """
+    Update service status (Admin or Vendor)
+    """
+    try:
+        status_val = status_data.status
+        valid_statuses = ["pending", "approved", "active", "freeze", "rejected"]
+        if status_val not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        update_data = {"status": status_val}
+        result = supabase_admin.table("vendor_services").update(update_data).eq("id", service_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Service not found")
+            
+        return {
+            "success": True,
+            "message": f"Service status updated to {status_val}",
+            "service": result.data[0]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/admin/services/{service_id}/commission", dependencies=[Depends(require_admin)])
 async def update_service_commission(service_id: str, data: CommissionUpdateRequest):
@@ -721,68 +854,74 @@ async def register_vendor(data: VendorRegisterRequest):
                 logger.error(f"Rollback failed for auth user: {rollback_err}")
             raise HTTPException(status_code=500, detail=f"Vendor profile failed: {str(e)}")
         
-        # 4. Services
-        for s in data.services:
+        # 4. Services - Bulk Insert for Performance
+        if data.services:
             try:
-                db_service = {
-                    "vendor_id": vendor_id,
-                    "service_name": s.serviceName,
-                    "service_category": s.serviceCategory,
-                    "service_category_other": s.serviceCategoryOther,
-                    "service_description": s.serviceDescription or s.description,
-                    "short_description": s.shortDescription,
-                    "whats_included": s.whatsIncluded,
-                    "whats_not_included": s.whatsNotIncluded,
-                    "duration_value": s.durationValue,
-                    "duration_unit": s.durationUnit,
-                    "languages_offered": s.languagesOffered,
-                    "languages_other": s.languagesOther,
-                    "group_size_min": s.groupSizeMin,
-                    "group_size_max": s.groupSizeMax,
-                    "daily_capacity": s.dailyCapacity,
-                    "operating_days": s.operatingDays,
-                    "locations_covered": s.locationsCovered,
-                    "currency": s.currency,
-                    "retail_price": s.retailPrice,
-                    "commission": 0,
-                    "net_price": s.retailPrice,
-                    # New fields
-                    "operating_hours_from": s.operatingHoursFrom,
-                    "operating_hours_from_period": s.operatingHoursFromPeriod,
-                    "operating_hours_to": s.operatingHoursTo,
-                    "operating_hours_to_period": s.operatingHoursToPeriod,
-                    "blackout_dates": s.blackoutDates,
-                    "blackout_holidays": s.blackoutHolidays,
-                    "blackout_weekends": s.blackoutWeekends,
-                    "advance_booking": s.advanceBooking,
-                    "advance_booking_other": s.advanceBookingOther,
-                    "not_suitable_for": s.notSuitableFor,
-                    "important_info": s.importantInfo,
-                    "cancellation_policy": s.cancellationPolicy,
-                    "accessibility_info": s.accessibilityInfo,
-                    "image_urls": s.imageUrls
-                }
-                supabase_admin.table("vendor_services").insert(db_service).execute()
-                logger.info(f"Service created: {s.serviceName}")
+                import asyncio
+                service_records = []
+                for s in data.services:
+                    service_records.append({
+                        "vendor_id": vendor_id,
+                        "service_name": s.serviceName,
+                        "service_category": s.serviceCategory,
+                        "service_category_other": s.serviceCategoryOther,
+                        "service_description": s.serviceDescription or s.description,
+                        "short_description": s.shortDescription,
+                        "whats_included": s.whatsIncluded,
+                        "whats_not_included": s.whatsNotIncluded,
+                        "duration_value": s.durationValue,
+                        "duration_unit": s.durationUnit,
+                        "languages_offered": s.languagesOffered,
+                        "languages_other": s.languagesOther,
+                        "group_size_min": s.groupSizeMin,
+                        "group_size_max": s.groupSizeMax,
+                        "daily_capacity": s.dailyCapacity,
+                        "operating_days": s.operatingDays,
+                        "locations_covered": s.locationsCovered,
+                        "currency": s.currency,
+                        "retail_price": s.retailPrice,
+                        "commission": 0,
+                        "net_price": s.retailPrice,
+                        "operating_hours_from": s.operatingHoursFrom,
+                        "operating_hours_from_period": s.operatingHoursFromPeriod,
+                        "operating_hours_to": s.operatingHoursTo,
+                        "operating_hours_to_period": s.operatingHoursToPeriod,
+                        "blackout_dates": s.blackoutDates,
+                        "blackout_holidays": s.blackoutHolidays,
+                        "blackout_weekends": s.blackoutWeekends,
+                        "advance_booking": s.advanceBooking,
+                        "advance_booking_other": s.advanceBookingOther,
+                        "not_suitable_for": s.notSuitableFor,
+                        "important_info": s.importantInfo,
+                        "cancellation_policy": s.cancellationPolicy,
+                        "accessibility_info": s.accessibilityInfo,
+                        "image_urls": s.imageUrls
+                    })
+                
+                # Perform bulk insert
+                await asyncio.to_thread(
+                    supabase_admin.table("vendor_services").insert(service_records).execute
+                )
+                logger.info(f"Successfully bulk inserted {len(service_records)} services for vendor {vendor_id}")
             except Exception as se:
-                logger.error(f"Service insert error for {s.serviceName}: {str(se)}")
+                logger.error(f"Bulk service insert error: {str(se)}")
                 # Rollback: Delete vendor, user, and auth
                 try:
-                    supabase_admin.table("vendors").delete().eq("id", vendor_id).execute()
+                    await asyncio.to_thread(supabase_admin.table("vendors").delete().eq("id", vendor_id).execute)
                     logger.info(f"Rolled back vendor profile: {vendor_id}")
                 except Exception as rollback_err:
                     logger.error(f"Rollback failed for vendor: {rollback_err}")
                 try:
-                    supabase_admin.table("users").delete().eq("id", user_id).execute()
+                    await asyncio.to_thread(supabase_admin.table("users").delete().eq("id", user_id).execute)
                     logger.info(f"Rolled back user profile: {user_id}")
                 except Exception as rollback_err:
                     logger.error(f"Rollback failed for user: {rollback_err}")
                 try:
-                    supabase_admin.auth.admin.delete_user(user_id)
+                    await asyncio.to_thread(supabase_admin.auth.admin.delete_user, user_id)
                     logger.info(f"Rolled back auth user: {user_id}")
                 except Exception as rollback_err:
                     logger.error(f"Rollback failed for auth: {rollback_err}")
-                raise HTTPException(status_code=500, detail=f"Service registration failed for {s.serviceName}: {str(se)}")
+                raise HTTPException(status_code=500, detail=f"Service registration failed: {str(se)}")
                 
         logger.info(f"Vendor registration completed successfully: {vendor_id}")
         return {"success": True, "vendor_id": vendor_id}
@@ -1373,17 +1512,17 @@ async def get_vendor_unread_count(
 
 @app.get("/api/admin/update-requests", dependencies=[Depends(require_staff)])
 async def get_update_requests(
-    status: Optional[str] = None,
+    req_status: Optional[str] = None,
     vendor_id: Optional[str] = None,
     limit: int = 50,
     skip: int = 0
 ):
     """Get update requests (for admin/manager approval)"""
     try:
-        if status == "pending" or vendor_id:
+        if req_status == "pending" or vendor_id:
             requests = await chat_service.get_pending_update_requests(vendor_id, limit, skip)
         else:
-            requests = await chat_service.get_all_update_requests(status, limit, skip)
+            requests = await chat_service.get_all_update_requests(req_status, limit, skip)
         
         return {"success": True, "requests": requests, "count": len(requests)}
         

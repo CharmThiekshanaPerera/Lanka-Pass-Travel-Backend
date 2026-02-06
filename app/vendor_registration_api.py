@@ -62,6 +62,9 @@ class ServiceData(BaseModel):
     locationsCovered: List[str] = []
     retailPrice: float
     currency: str = "LKR"
+    discountType: Optional[str] = None
+    discountValue: Optional[float] = None
+    promotions: Optional[str] = None
     notSuitableFor: Optional[str] = None
     importantInfo: Optional[str] = None
     cancellationPolicy: Optional[str] = None
@@ -306,6 +309,9 @@ async def register_vendor(vendor_data: VendorRegistrationRequest):
                 "locations_covered": service.locationsCovered,
                 "retail_price": service.retailPrice,
                 "currency": service.currency,
+                "discount_type": service.discountType,
+                "discount_value": service.discountValue,
+                "promotions": service.promotions,
                 "not_suitable_for": service.notSuitableFor,
                 "important_info": service.importantInfo,
                 "cancellation_policy": service.cancellationPolicy,
@@ -488,17 +494,18 @@ async def get_vendors(
             detail=f"Failed to fetch vendors: {str(e)}"
         )
 
-@app.put("/api/vendor/{vendor_id}/status")
+@app.patch("/api/vendor/{vendor_id}/status")
 async def update_vendor_status(
     vendor_id: str,
     status: str,
-    reason: Optional[str] = None
+    reason: Optional[str] = None,
+    admin_notes: Optional[str] = None
 ):
     """
     Update vendor status (admin only)
     """
     try:
-        valid_statuses = ["pending", "approved", "rejected", "suspended"]
+        valid_statuses = ["pending", "approved", "active", "freeze", "rejected", "suspended"]
         
         if status not in valid_statuses:
             raise HTTPException(
@@ -509,8 +516,10 @@ async def update_vendor_status(
         update_data = {"status": status}
         if reason:
             update_data["status_reason"] = reason
+        if admin_notes:
+            update_data["admin_notes"] = admin_notes
         
-        res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
+        result = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
         
         if not result.data:
             raise HTTPException(
@@ -531,6 +540,42 @@ async def update_vendor_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update vendor status: {str(e)}"
         )
+
+class ServiceStatusRequest(BaseModel):
+    status: str
+
+@app.patch("/api/vendor/services/{service_id}/status")
+async def update_service_status(
+    service_id: str,
+    status_data: ServiceStatusRequest
+):
+    """
+    Update service status (Admin or Vendor)
+    """
+    try:
+        status = status_data.status
+        valid_statuses = ["pending", "approved", "active", "freeze", "rejected"]
+        if status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        update_data = {"status": status}
+        result = supabase_admin.table("vendor_services").update(update_data).eq("id", service_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Service not found")
+            
+        return {
+            "success": True,
+            "message": f"Service status updated to {status}",
+            "service": result.data[0]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Unified Auth Endpoints
 class LoginRequest(BaseModel):
@@ -565,6 +610,17 @@ async def login(login_data: LoginRequest):
             "name": auth_response.user.user_metadata.get("name", ""),
             "role": auth_response.user.user_metadata.get("role", "user")
         }
+
+        # Check Vendor Status if role is vendor
+        if user_profile.get("role") == "vendor":
+            vendor_data = supabase_admin.table("vendors").select("status").eq("user_id", auth_response.user.id).execute()
+            if vendor_data.data:
+                vendor_status = vendor_data.data[0].get("status")
+                if vendor_status in ["freeze", "terminated", "suspended"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Account is {vendor_status}. Please contact support."
+                    )
         
         return {
             "success": True,

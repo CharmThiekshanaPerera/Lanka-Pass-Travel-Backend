@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 import logging
+import asyncio
 
 from app.database.mongo_config import (
     get_chat_messages_collection,
@@ -218,29 +219,42 @@ class ChatService:
             ]
             
             cursor = collection.aggregate(pipeline)
-            summary = []
+            temp_summary = []
+            vendor_ids = []
             
             async for doc in cursor:
                 vendor_id = doc["_id"]
                 latest_msg = self._serialize_message(doc["latest_message"])
                 unread_count = doc["unread_count"]
                 
-                # Try to get vendor name from Supabase
-                vendor_name = "Unknown Vendor"
-                try:
-                    from app.database.supabase_client import supabase_admin
-                    vendor_res = supabase_admin.table("vendors").select("business_name").eq("id", vendor_id).single().execute()
-                    if vendor_res.data:
-                        vendor_name = vendor_res.data.get("business_name", "Unknown Vendor")
-                except Exception as e:
-                    logger.error(f"Error fetching vendor name for summary: {str(e)}")
-
-                summary.append({
+                temp_summary.append({
                     "vendor_id": vendor_id,
-                    "vendor_name": vendor_name,
                     "latest_message": latest_msg,
                     "unread_count": unread_count
                 })
+                vendor_ids.append(vendor_id)
+
+            # Bulk fetch vendor names from Supabase
+            vendor_names = {}
+            if vendor_ids:
+                try:
+                    from app.database.supabase_client import supabase_admin
+                    # Use asyncio.to_thread for the bulk query
+                    vendor_res = await asyncio.to_thread(
+                        supabase_admin.table("vendors")
+                        .select("id, business_name")
+                        .in_("id", vendor_ids)
+                        .execute
+                    )
+                    if vendor_res.data:
+                        vendor_names = {v["id"]: v["business_name"] for v in vendor_res.data}
+                except Exception as e:
+                    logger.error(f"Error fetching vendor names bulk: {str(e)}")
+
+            summary = []
+            for item in temp_summary:
+                item["vendor_name"] = vendor_names.get(item["vendor_id"], "Unknown Vendor")
+                summary.append(item)
             
             return summary
             
