@@ -18,6 +18,7 @@ load_dotenv()
 from supabase import create_client, Client
 import logging
 from app.services.sms_service import SmsService
+from app.services.email_service import EmailService
 from app.services.chat_service import chat_service
 from app.database.mongo_config import ensure_indexes, close_mongo_connection
 
@@ -203,6 +204,13 @@ class VerifyOtpRequest(BaseModel):
     phoneNumber: str
     otpCode: str
 
+class SendEmailOtpRequest(BaseModel):
+    email: EmailStr
+
+class VerifyEmailOtpRequest(BaseModel):
+    email: EmailStr
+    otpCode: str
+
 class VendorStatusRequest(BaseModel):
     status: Optional[str] = None
     status_reason: Optional[str] = None
@@ -368,13 +376,37 @@ async def send_otp(data: SendOtpRequest):
 @app.post("/api/auth/verify-otp")
 async def verify_otp(data: VerifyOtpRequest):
     try:
-        is_valid = await SmsService.verify_otp(data.phoneNumber, data.otpCode)
-        if is_valid:
+        success = await SmsService.verify_otp(data.phoneNumber, data.otpCode)
+        if success:
             return {"success": True, "message": "OTP verified successfully"}
         else:
             raise HTTPException(status_code=400, detail="Invalid or expired OTP")
     except Exception as e:
         logger.error(f"Verify OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/send-email-otp")
+async def send_email_otp(data: SendEmailOtpRequest):
+    try:
+        success = await EmailService.send_otp(data.email)
+        if success:
+            return {"success": True, "message": f"Verification code sent to {data.email}"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send verification email")
+    except Exception as e:
+        logger.error(f"Send Email OTP error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/verify-email-otp")
+async def verify_email_otp(data: VerifyEmailOtpRequest):
+    try:
+        success = await EmailService.verify_otp(data.email, data.otpCode)
+        if success:
+            return {"success": True, "message": "Email verified successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+    except Exception as e:
+        logger.error(f"Verify Email OTP error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Auth API

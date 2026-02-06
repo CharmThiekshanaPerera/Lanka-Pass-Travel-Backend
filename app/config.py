@@ -28,6 +28,10 @@ class Settings:
     TEXT_LK_API_KEY: str = os.getenv("TEXT_LK_API_KEY", "")
     TEXT_LK_SENDER_ID: str = os.getenv("TEXT_LK_SENDER_ID", "TextLKDemo")
 
+    # SendGrid
+    SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL: str = os.getenv("SENDGRID_FROM_EMAIL", "")
+
     
     @property
     def is_production(self) -> bool:
