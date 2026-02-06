@@ -204,9 +204,10 @@ class VerifyOtpRequest(BaseModel):
     otpCode: str
 
 class VendorStatusRequest(BaseModel):
-    status: str
+    status: Optional[str] = None
     status_reason: Optional[str] = None
     admin_notes: Optional[str] = None
+    is_public: Optional[bool] = None
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -509,6 +510,21 @@ async def register(data: RegisterRequest):
 async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)):
     return current_user
 
+@app.get("/api/public/vendors/featured")
+async def get_featured_vendors():
+    try:
+        # Fetch status=approved or active AND is_public=true
+        res = supabase_admin.table("vendors")\
+            .select("id, business_name, logo_url, vendor_type, cover_image_url, operating_areas")\
+            .eq("is_public", True)\
+            .in_("status", ["approved", "active"])\
+            .execute()
+            
+        return {"success": True, "vendors": res.data or []}
+    except Exception as e:
+        logger.error(f"Fetch featured vendors error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Admin API
 @app.get("/api/admin/dashboard", dependencies=[Depends(require_staff)])
 async def get_admin_dashboard():
@@ -580,12 +596,19 @@ async def get_vendor_detail(vendor_id: str):
 
 @app.patch("/api/admin/vendors/{vendor_id}", dependencies=[Depends(require_staff)])
 async def update_vendor_status(vendor_id: str, data: VendorStatusRequest):
-    update_data = {
-        "status": data.status,
-        "status_reason": data.status_reason
-    }
+    update_data = {}
+    
+    if data.status is not None:
+        update_data["status"] = data.status
+    if data.status_reason is not None:
+        update_data["status_reason"] = data.status_reason
     if data.admin_notes is not None:
         update_data["admin_notes"] = data.admin_notes
+    if data.is_public is not None:
+        update_data["is_public"] = data.is_public
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
 
     res = supabase_admin.table("vendors").update(update_data).eq("id", vendor_id).execute()
     return {"success": True, "vendor": res.data[0]}
