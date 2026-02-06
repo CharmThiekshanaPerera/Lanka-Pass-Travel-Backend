@@ -761,6 +761,13 @@ async def register_vendor(data: VendorRegisterRequest):
     try:
         logger.info(f"Vendor registration: {data.email}")
         
+        # Enforce phone verification
+        if not data.phoneVerified:
+            raise HTTPException(
+                status_code=400, 
+                detail="Mobile number must be verified before registration."
+            )
+        
         # 1. Auth User - Use ADMIN client
         # Default password to '123456' if not provided
         password = data.password if data.password else "123456"

@@ -24,10 +24,9 @@ class Settings:
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
     
-    # Twilio
-    TWILIO_ACCOUNT_SID: str = os.getenv("TWILIO_ACCOUNT_SID", "")
-    TWILIO_AUTH_TOKEN: str = os.getenv("TWILIO_AUTH_TOKEN", "")
-    TWILIO_PHONE_NUMBER: str = os.getenv("TWILIO_PHONE_NUMBER", "")
+    # Text.lk
+    TEXT_LK_API_KEY: str = os.getenv("TEXT_LK_API_KEY", "")
+    TEXT_LK_SENDER_ID: str = os.getenv("TEXT_LK_SENDER_ID", "TextLKDemo")
 
     
     @property
