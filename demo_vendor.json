@@ -1,0 +1,31 @@
+{
+  "vendorType": "Tour Operator",
+  "businessName": "Demo Tours",
+  "contactPerson": "Vendor Demo",
+  "email": "vendor@demo.com",
+  "phoneNumber": "+94771234567",
+  "operatingAreas": ["Colombo", "Kandy"],
+  "businessAddress": "123 Demo St, Colombo",
+  "bankName": "Bank of Ceylon",
+  "accountHolderName": "Demo Tours Pvt Ltd",
+  "accountNumber": "1234567890",
+  "bankBranch": "Colombo",
+  "acceptTerms": true,
+  "acceptCommission": true,
+  "acceptCancellation": true,
+  "grantRights": true,
+  "confirmAccuracy": true,
+  "marketingPermission": true,
+  "password": "Password123!",
+  "services": [
+    {
+      "serviceName": "City Tour",
+      "serviceCategory": "Tours",
+      "shortDescription": "A demo city tour",
+      "durationValue": 4,
+      "durationUnit": "hours",
+      "retailPrice": 5000,
+      "currency": "LKR"
+    }
+  ]
+}
