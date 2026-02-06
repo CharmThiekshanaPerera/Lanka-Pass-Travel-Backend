@@ -138,7 +138,7 @@ async def get_current_user(request: Request):
                     if v_res.data:
                         v_status = v_res.data[0].get("status")
                         p["status"] = v_status
-                        if v_status in ["freeze", "terminated", "suspended", "pending"]:
+                        if v_status in ["freeze", "terminated", "suspended"]:
                             f.write(f"Access Denied: Vendor status is {v_status}\n")
                             raise HTTPException(
                                 status_code=403, 
@@ -1667,11 +1667,14 @@ async def upload_vendor_file(
         
         # Update vendor record with file URL ONLY for Media Tab items (direct updates)
         # Documents (certificates, licenses) MUST go through profile update approval flow
-        if file_type in ['logo', 'cover_image', 'promo_video']:
+        if file_type in ['logo', 'cover_image', 'promo_video', 'reg_certificate', 'nic_passport', 'tourism_license']:
             column_map = {
                 'logo': 'logo_url',
                 'cover_image': 'cover_image_url',
-                'promo_video': 'promo_video_url'
+                'promo_video': 'promo_video_url',
+                'reg_certificate': 'reg_certificate_url',
+                'nic_passport': 'nic_passport_url',
+                'tourism_license': 'tourism_license_url'
             }
             if file_type in column_map:
                 supabase_admin.table("vendors").update({column_map[file_type]: public_url}).eq("id", vendor_id).execute()
