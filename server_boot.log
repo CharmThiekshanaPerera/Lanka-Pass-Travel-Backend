@@ -1,0 +1,469 @@
+INFO:     Started server process [17736]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+BOOT: SUPABASE_URL=https://azrdrjbrwdahwnkuufvw.supabase.co
+BOOT: SUPABASE_KEY starts with: eyJhbGciOiJIUzI...
+INFO:     127.0.0.1:62600 - "OPTIONS /api/auth/login HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/token?grant_type=password "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+WARNING:app.main:Could not fetch extended user profile: {'message': 'infinite recursion detected in policy for relation "users"', 'code': '42P17', 'hint': None, 'details': None}
+INFO:     127.0.0.1:62600 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62600 - "OPTIONS /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61322 - "OPTIONS /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65112 - "OPTIONS /api/admin/managers HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:61322 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/vendors?select=%2A "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62422 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:62600 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/user "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.5a2c2de4-4967-43e3-996f-d7092e5f074e "HTTP/2 500 Internal Server Error"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&role=eq.manager "HTTP/2 500 Internal Server Error"
+INFO:     127.0.0.1:65112 - "GET /api/admin/managers HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62600 - "GET /api/admin/vendors?skip=0&limit=50 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62422 - "GET /api/admin/managers HTTP/1.1" 401 Unauthorized
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"

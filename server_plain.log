@@ -1,0 +1,80 @@
+INFO:     Started server process [32684]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/admin/users "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users "HTTP/2 201 Created"
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/token?grant_type=password "HTTP/2 200 OK"
+INFO:     127.0.0.1:64347 - "POST /api/auth/register HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/token?grant_type=password "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: GET https://azrdrjbrwdahwnkuufvw.supabase.co/rest/v1/users?select=%2A&id=eq.1a5618f1-9440-4ac9-bd6e-367e44b410fc "HTTP/2 500 Internal Server Error"
+ERROR:app.main:Login failed with exception
+Traceback (most recent call last):
+  File "C:\Users\amjad\OneDrive\Documents\Custom Office Templates\OneDrive\Desktop\Phyxle\Lanka-Pass-Travel-Backend\app\main.py", line 102, in login
+    user_data = supabase.table("users").select("*").eq("id", user_id).execute()
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\postgrest\_sync\request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'infinite recursion detected in policy for relation "users"', 'code': '42P17', 'hint': None, 'details': None}
+INFO:     127.0.0.1:64247 - "POST /api/auth/login HTTP/1.1" 401 Unauthorized
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/admin/users "HTTP/2 403 Forbidden"
+ERROR:app.main:Registration failed with exception
+Traceback (most recent call last):
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_base_api.py", line 73, in _request
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\httpx\_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '403 Forbidden' for url 'https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/admin/users'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\amjad\OneDrive\Documents\Custom Office Templates\OneDrive\Desktop\Phyxle\Lanka-Pass-Travel-Backend\app\main.py", line 162, in register
+    })
+    
+    ...<4 lines>...
+        "id": user_id,
+    
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_admin_api.py", line 126, in create_user
+    response = self._request(
+        "POST",
+        "admin/users",
+        body=attributes,
+    )
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_base_api.py", line 76, in _request
+    raise handle_exception(e)  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+supabase_auth.errors.AuthApiError: User not allowed
+INFO:     127.0.0.1:58199 - "POST /api/auth/register HTTP/1.1" 500 Internal Server Error
+INFO:httpx:HTTP Request: POST https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/admin/users "HTTP/2 403 Forbidden"
+ERROR:app.main:Registration failed with exception
+Traceback (most recent call last):
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_base_api.py", line 73, in _request
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\httpx\_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '403 Forbidden' for url 'https://azrdrjbrwdahwnkuufvw.supabase.co/auth/v1/admin/users'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\amjad\OneDrive\Documents\Custom Office Templates\OneDrive\Desktop\Phyxle\Lanka-Pass-Travel-Backend\app\main.py", line 162, in register
+    })
+    
+    ...<4 lines>...
+        "id": user_id,
+    
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_admin_api.py", line 126, in create_user
+    response = self._request(
+        "POST",
+        "admin/users",
+        body=attributes,
+    )
+  File "C:\Users\amjad\AppData\Local\Programs\Python\Python313\Lib\site-packages\supabase_auth\_sync\gotrue_base_api.py", line 76, in _request
+    raise handle_exception(e)  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+supabase_auth.errors.AuthApiError: User not allowed
+INFO:     127.0.0.1:50629 - "POST /api/auth/register HTTP/1.1" 500 Internal Server Error
