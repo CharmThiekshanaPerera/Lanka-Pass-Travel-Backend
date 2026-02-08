@@ -25,34 +25,64 @@ It assumes you are using Ubuntu 22.04 LTS.
    - Optional: allow `Custom TCP` port `8000` from `0.0.0.0/0` for direct access.
 7. Click `Launch instance`.
 
+Current EC2:
+- Public IPv4: `13.212.50.145`
+- Public DNS: `ec2-13-212-50-145.ap-southeast-1.compute.amazonaws.com`
+
 ## 4) Connect to Your Instance
 From your local machine:
 ```bash
-ssh -i /path/to/key.pem ubuntu@<EC2_PUBLIC_IP>
+ssh -i /path/to/key.pem ubuntu@13.212.50.145
 ```
 
 ## 5) Install Docker on EC2
+Option A (recommended): Docker official repo (includes Compose plugin)
 ```bash
 sudo apt update
-sudo apt install -y docker.io docker-compose-plugin
+sudo apt install -y ca-certificates curl gnupg
+
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+Option B: Ubuntu repo packages (uses classic docker-compose)
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose
+```
+
+After install:
+```bash
 sudo usermod -aG docker $USER
 newgrp docker
+docker --version
+docker compose version   # if you installed the plugin
+docker-compose --version # if you installed classic compose
 ```
 
 ## 6) Upload or Clone Your Project
-Option A: Clone (recommended if you have a repo)
+Option A: Clone (recommended)
 ```bash
-git clone <your-repo-url>
-cd <repo-folder>
+git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git /home/ubuntu/lanka-pass-travel-backend
+cd /home/ubuntu/lanka-pass-travel-backend
 ```
 
 Option B: Upload your project folder
 ```bash
-scp -i /path/to/key.pem -r "d:\Phyxle Web Projects\Travel App\Lanka Travel Pass Backend" ubuntu@<EC2_PUBLIC_IP>:/home/ubuntu/
+scp -i /path/to/key.pem -r "d:\Phyxle Web Projects\Travel App\Lanka Travel Pass Backend" ubuntu@13.212.50.145:/home/ubuntu/
 ```
 Then on EC2:
 ```bash
-cd "/home/ubuntu/Lanka Travel Pass Backend"
+cd "/home/ubuntu/lanka-pass-travel-backend"
 ```
 
 ## 7) Create the .env File
@@ -70,7 +100,7 @@ docker compose -f docker-compose.prod.yml up --build -d
 ## 9) Check It Works
 ```bash
 docker ps
-curl http://<EC2_PUBLIC_IP>/docs
+curl http://13.212.50.145/docs
 ```
 
 ## Common Issues

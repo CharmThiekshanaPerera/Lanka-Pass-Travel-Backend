@@ -67,3 +67,8 @@ After creating the first admin:
 1. Login to the frontend as admin
 2. Use the "Managers" tab to create manager accounts
 3. Test the full workflow through the UI
+
+## Deployment References
+- AWS EC2 setup: `AWS_EC2_SETUP.md`
+- Docker usage: `DOCKER.md`
+- CI/CD to EC2: `CI_CD.md`

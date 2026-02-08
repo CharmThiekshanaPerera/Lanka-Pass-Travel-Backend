@@ -62,6 +62,21 @@ python run.py
 
 The server will start at `http://localhost:8000` with auto-reload enabled.
 
+## Docker
+
+Use Docker for local or production runs:
+- `DOCKER.md`
+
+## AWS EC2 (Beginner Guide)
+
+Deploy to EC2 with step-by-step instructions:
+- `AWS_EC2_SETUP.md`
+
+## CI/CD (GitHub Actions → EC2)
+
+Automated deploy on every push to `main`:
+- `CI_CD.md`
+
 ### API Documentation
 
 Once the server is running, you can access the interactive API documentation:
