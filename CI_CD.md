@@ -88,20 +88,22 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            set -e
-            
-            APP_DIR="/home/ubuntu/lanka-pass-travel-backend"
-            
-            # Clone repository if it doesn't exist
-            if [ ! -d "$APP_DIR/.git" ]; then
-              echo "Cloning repository..."
-              git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git "$APP_DIR"
-            fi
-            
-            cd "$APP_DIR"
-            
-            # Configure git authentication using GitHub token
-            git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+             set -e
+           
+             APP_DIR="/home/ubuntu/lanka-pass-travel-backend"
+             GH_TOKEN="${{ secrets.GH_TOKEN }}"
+           
+             # Clone repository with authentication if it doesn't exist
+             if [ ! -d "$APP_DIR/.git" ]; then
+               echo "Cloning repository with authentication..."
+               git clone https://${GH_TOKEN}@github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git "$APP_DIR"
+             fi
+           
+             cd "$APP_DIR"
+           
+             # Configure git to use token for future commands
+             git config --global url."https://${GH_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+             git config --global credential.helper store
             
             # Fetch and reset to latest main branch
             echo "Pulling latest changes..."
