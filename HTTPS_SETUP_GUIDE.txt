@@ -1,0 +1,530 @@
+================================================================================
+HTTPS SETUP GUIDE - Connect HostGator Frontend to AWS EC2 Backend
+================================================================================
+
+PROJECT DETAILS:
+- Domain: lankapasstravel.com
+- Frontend Host: HostGator (192.254.224.250)
+- Backend Host: AWS EC2 (13.212.50.145)
+- Date: February 10, 2026
+
+================================================================================
+STEP 1: CREATE ELASTIC IP ON AWS (STATIC IP)
+================================================================================
+
+Why: EC2 instances have dynamic IPs that change on restart. You need a static IP.
+
+Steps:
+1. Login to AWS Console
+2. Go to EC2 Dashboard
+3. Click "Elastic IPs" (left sidebar under Network & Security)
+4. Click "Allocate Elastic IP address"
+5. Select Region: ap-southeast-1 (Asia Pacific Singapore - same as your instance)
+6. Click "Allocate"
+7. Note the IP address
+8. Click "Associate this Elastic IP address"
+9. Select your EC2 instance
+10. Click "Associate"
+
+Result: Your EC2 now has a permanent IP address that won't change on restart.
+
+Note: If 13.212.50.145 is already elastic, you can skip this step.
+
+
+================================================================================
+STEP 2: UPDATE DNS RECORDS IN HOSTGATOR
+================================================================================
+
+Why: You need a subdomain (api.lankapasstravel.com) pointing to your EC2 backend.
+
+Steps:
+1. Login to HostGator Control Panel (cPanel)
+2. Go to "Zone Editor" or "DNS Management"
+3. Select lankapasstravel.com
+4. Look for existing A records - you should see:
+   - lankapasstravel.com → 192.254.224.250 (keep this for frontend)
+   - www → points to lankapasstravel.com (keep this)
+5. Add a NEW A record:
+   Name: api
+   Type: A
+   Value: 13.212.50.145
+   TTL: 300 (for testing, increase to 3600 later)
+6. Click "Save"
+
+Expected Result:
+   api.lankapasstravel.com → 13.212.50.145
+
+Verification (wait 5-10 minutes for DNS to propagate):
+   In PowerShell or Command Prompt:
+   nslookup api.lankapasstravel.com
+   
+   Should show: 13.212.50.145
+
+
+================================================================================
+STEP 3: SECURE EC2 SECURITY GROUP
+================================================================================
+
+Why: Your EC2 needs to allow HTTPS (443) and HTTP (80) traffic.
+
+Steps:
+1. Login to AWS Console
+2. Go to EC2 Dashboard
+3. Click "Security Groups" (left sidebar under Network & Security)
+4. Find the security group for your instance
+5. Click on it → "Edit inbound rules"
+6. Ensure these rules exist:
+   
+   Rule 1:
+   - Type: HTTP
+   - Protocol: TCP
+   - Port: 80
+   - Source: 0.0.0.0/0 (anywhere)
+   
+   Rule 2:
+   - Type: HTTPS
+   - Protocol: TCP
+   - Port: 443
+   - Source: 0.0.0.0/0 (anywhere)
+   
+   Rule 3 (Keep existing):
+   - Type: SSH
+   - Protocol: TCP
+   - Port: 22
+   - Source: Your IP or 0.0.0.0/0
+
+7. Click "Save rules"
+
+
+================================================================================
+STEP 4: SSH INTO YOUR EC2 INSTANCE
+================================================================================
+
+Why: You need terminal access to install HTTPS certificates.
+
+Command:
+   ssh -i your-key-pair.pem ec2-user@13.212.50.145
+
+OR if using Ubuntu:
+   ssh -i your-key-pair.pem ubuntu@13.212.50.145
+
+Note: Replace "your-key-pair.pem" with your actual PEM file path
+
+Troubleshooting:
+   Error: "Permission denied": Make sure PEM file permissions are correct
+   chmod 400 your-key-pair.pem
+
+Once connected, you should see:
+   ec2-user@ip-xxx:~$
+
+
+================================================================================
+STEP 5: INSTALL CERTBOT & GET HTTPS CERTIFICATE
+================================================================================
+
+Why: You need an SSL certificate for HTTPS (free from Let's Encrypt).
+
+Commands (run in EC2 terminal):
+
+1. Update system packages:
+   sudo yum update -y
+   OR (if Ubuntu):
+   sudo apt update -y
+
+2. Install Certbot with Nginx plugin:
+   sudo yum install certbot python3-certbot-nginx -y
+   OR (if Ubuntu):
+   sudo apt install certbot python3-certbot-nginx -y
+
+3. Generate certificate for api.lankapasstravel.com:
+   sudo certbot certonly --standalone -d api.lankapasstravel.com
+
+   When prompted:
+   - Enter your email: your-email@example.com
+   - Agree to terms: Y
+   - Share email with EFF: Y or N (your choice)
+
+4. Verify certificate was created:
+   sudo ls -la /etc/letsencrypt/live/api.lankapasstravel.com/
+
+   You should see:
+   - fullchain.pem
+   - privkey.pem
+   - cert.pem
+   - chain.pem
+
+Certificate paths (use these later):
+   Full chain: /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem
+   Private key: /etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem
+
+
+================================================================================
+STEP 6: CONFIGURE NGINX FOR HTTPS
+================================================================================
+
+Why: Nginx will handle HTTPS and proxy requests to your Flask/FastAPI backend.
+
+1. Check if Nginx is installed:
+   sudo systemctl status nginx
+
+   If not installed:
+   sudo yum install nginx -y
+   OR (if Ubuntu):
+   sudo apt install nginx -y
+
+2. Edit Nginx configuration:
+   sudo nano /etc/nginx/nginx.conf
+
+3. Find the http {} section and add this server block:
+
+   server {
+       listen 80;
+       server_name api.lankapasstravel.com;
+       return 301 https://$server_name$request_uri;
+   }
+
+   server {
+       listen 443 ssl http2;
+       server_name api.lankapasstravel.com;
+
+       ssl_certificate /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem;
+
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_ciphers HIGH:!aNULL:!MD5;
+       ssl_prefer_server_ciphers on;
+
+       location / {
+           proxy_pass http://localhost:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+
+4. Save file: Ctrl+O, Enter, Ctrl+X
+
+5. Test Nginx configuration:
+   sudo nginx -t
+
+   Should show: "syntax is ok" and "test is successful"
+
+6. Start/reload Nginx:
+   sudo systemctl restart nginx
+
+7. Enable Nginx to start on boot:
+   sudo systemctl enable nginx
+
+
+================================================================================
+STEP 7: VERIFY HTTPS IS WORKING
+================================================================================
+
+1. From your local machine, test the HTTPS endpoint:
+   curl https://api.lankapasstravel.com/docs
+   
+   OR use browser:
+   https://api.lankapasstravel.com/docs
+
+2. If using Docker, verify your backend container listens on port 8000:
+   docker ps
+   
+   Should show your Flask/FastAPI container
+
+3. If you see SSL certificate warnings:
+   - Wait 24 hours for full DNS propagation
+   - OR test with: curl -k https://api.lankapasstravel.com/docs (ignores cert warnings)
+
+4. Test API endpoints:
+   curl https://api.lankapasstravel.com/api/v1/health
+   curl https://api.lankapasstravel.com/api/v1/vendors
+
+
+================================================================================
+STEP 8: UPDATE YOUR FLASK/FASTAPI BACKEND
+================================================================================
+
+Option A: If using Flask with Nginx (RECOMMENDED):
+
+No changes needed! Nginx handles HTTPS. Your Flask app just needs to listen
+on localhost:8000. Update your app if needed:
+
+   if __name__ == '__main__':
+       app.run(
+           host='127.0.0.1',
+           port=8000,
+           debug=False
+       )
+
+Option B: If running Flask/FastAPI directly (NOT RECOMMENDED):
+
+You need to handle HTTPS at application level:
+
+For Flask:
+   from flask import Flask
+   
+   app = Flask(__name__)
+   
+   if __name__ == '__main__':
+       app.run(
+           host='0.0.0.0',
+           port=443,
+           ssl_context=(
+               '/etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem',
+               '/etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem'
+           )
+       )
+
+For FastAPI with Uvicorn:
+   uvicorn main:app \
+     --host 0.0.0.0 \
+     --port 443 \
+     --ssl-keyfile=/etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem \
+     --ssl-certfile=/etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem
+
+
+================================================================================
+STEP 9: UPDATE YOUR FRONTEND (HostGator)
+================================================================================
+
+Update all API calls from HTTP to HTTPS using the new subdomain.
+
+Find and replace in your frontend code:
+
+OLD:
+   http://13.212.50.145:5000/api/
+   http://13.212.50.145:8000/api/
+
+NEW:
+   https://api.lankapasstravel.com/api/
+
+Example JavaScript/React update:
+
+OLD:
+   fetch('http://13.212.50.145:5000/api/v1/vendors')
+
+NEW:
+   fetch('https://api.lankapasstravel.com/api/v1/vendors')
+
+Files to update:
+   - All JavaScript files making API calls
+   - Environment variables/config files
+   - API base URL configuration
+   - Any hardcoded IP addresses
+
+
+================================================================================
+STEP 10: CONFIGURE CORS IN BACKEND
+================================================================================
+
+Why: Your HostGator frontend needs permission to call EC2 backend API.
+
+Update your Flask/FastAPI app to allow CORS:
+
+For Flask:
+   from flask_cors import CORS
+   
+   app = Flask(__name__)
+   
+   CORS(app, resources={
+       r"/api/*": {
+           "origins": [
+               "https://lankapasstravel.com",
+               "https://www.lankapasstravel.com"
+           ],
+           "methods": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+           "allow_headers": ["Content-Type", "Authorization"],
+           "supports_credentials": True
+       }
+   })
+
+For FastAPI:
+   from fastapi.middleware.cors import CORSMiddleware
+   
+   app = FastAPI()
+   
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=[
+           "https://lankapasstravel.com",
+           "https://www.lankapasstravel.com"
+       ],
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+
+After updating, restart your backend:
+   docker restart <container-name>
+   OR
+   systemctl restart <your-service>
+
+
+================================================================================
+STEP 11: TEST THE COMPLETE FLOW
+================================================================================
+
+1. Test from HostGator frontend:
+   - Navigate to https://lankapasstravel.com (your frontend)
+   - Open browser DevTools (F12)
+   - Go to Network tab
+   - Perform an action that calls the backend API
+   - Verify API calls go to: https://api.lankapasstravel.com/api/...
+   - Verify response status is 200 (success)
+
+2. Test from local machine:
+   curl https://api.lankapasstravel.com/docs
+   curl -H "Content-Type: application/json" https://api.lankapasstravel.com/api/v1/health
+
+3. Test with authentication:
+   curl -X POST https://api.lankapasstravel.com/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password"}'
+
+4. Check logs on EC2:
+   docker compose -f docker-compose.prod.yml logs -f
+   OR
+   journalctl -u nginx -f
+
+
+================================================================================
+STEP 12: AUTOMATIC CERTIFICATE RENEWAL
+================================================================================
+
+Why: Let's Encrypt certificates expire every 90 days. Need auto-renewal.
+
+Set up automatic renewal:
+   sudo certbot renew --dry-run
+
+If successful, enable auto-renewal:
+   sudo systemctl enable certbot.timer
+   sudo systemctl start certbot.timer
+
+Verify it's active:
+   sudo systemctl status certbot.timer
+
+Check renewal schedule:
+   systemctl list-timers certbot.timer
+
+Certbot will automatically try to renew 30 days before expiration.
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Issue: DNS not resolving
+Solution:
+   nslookup api.lankapasstravel.com
+   - If not showing 13.212.50.145, wait 10+ minutes
+   - Check HostGator DNS records are saved
+   - Flush local DNS: ipconfig /flushdns (Windows)
+
+Issue: Connection refused to EC2
+Solution:
+   - Check EC2 security group allows port 80, 443
+   - Check Nginx is running: sudo systemctl status nginx
+   - Check backend container is running: docker ps
+
+Issue: SSL certificate not found
+Solution:
+   - Verify certbot ran successfully
+   - Check: sudo ls /etc/letsencrypt/live/api.lankapasstravel.com/
+   - If missing, run certbot again
+
+Issue: CORS errors in browser console
+Solution:
+   - Verify CORS configuration is updated
+   - Restart backend after changes
+   - Check origin URLs match exactly (https, no www mismatch, etc.)
+
+Issue: 502 Bad Gateway from Nginx
+Solution:
+   - Check backend is running on port 8000: netstat -tlnp | grep 8000
+   - Check Nginx logs: sudo tail -f /var/log/nginx/error.log
+   - Verify proxy_pass is correct: localhost:8000
+
+Issue: Certificate warnings in browser
+Solution:
+   - Wait 24 hours for full DNS propagation
+   - Clear browser cache
+   - Try incognito/private mode
+   - Use: https://api.lankapasstravel.com (not IP address)
+
+
+================================================================================
+QUICK REFERENCE - COMMANDS TO REMEMBER
+================================================================================
+
+View certificate info:
+   sudo certbot certificates
+   OR
+   sudo openssl x509 -in /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem -text -noout
+
+Restart Nginx:
+   sudo systemctl restart nginx
+
+Check Nginx config:
+   sudo nginx -t
+
+View Nginx logs:
+   sudo tail -f /var/log/nginx/error.log
+   sudo tail -f /var/log/nginx/access.log
+
+View all open ports:
+   sudo netstat -tlnp
+
+Test API endpoint:
+   curl https://api.lankapasstravel.com/api/v1/health
+
+Check Docker containers:
+   docker ps
+   docker logs -f <container-name>
+
+SSH to EC2:
+   ssh -i your-key.pem ec2-user@13.212.50.145
+
+View certificate expiry:
+   sudo certbot certificates
+
+
+================================================================================
+SUMMARY OF DNS RECORDS AFTER SETUP
+================================================================================
+
+Your lankapasstravel.com DNS records should look like:
+
+Name                   Type   Value
+─────────────────────────────────────────────────────────
+lankapasstravel.com    A      192.254.224.250      (Frontend on HostGator)
+www                    CNAME  lankapasstravel.com  (Redirect to root)
+api                    A      13.212.50.145        (Backend on EC2)
+mail                   A      192.254.224.250      (Mail server)
+s1._domainkey          CNAME  s1.domainkey...      (DKIM)
+s2._domainkey          CNAME  s2.domainkey...      (DKIM)
+_DMARC                 TXT    v=DMARC1; p=none;    (DMARC)
+
+Results:
+   https://lankapasstravel.com        → Frontend on HostGator
+   https://www.lankapasstravel.com    → Frontend on HostGator
+   https://api.lankapasstravel.com    → Backend on EC2 (13.212.50.145)
+
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Start with STEP 1 - Create/verify Elastic IP
+2. Complete STEP 2 - Update HostGator DNS
+3. Wait 5-10 minutes for DNS propagation
+4. Follow STEP 3-7 for HTTPS setup
+5. Update frontend code (STEP 9)
+6. Test everything (STEP 11)
+7. Monitor logs and adjust as needed
+
+For questions or issues, check the TROUBLESHOOTING section above.
+
+Good luck! Your website will be secure with HTTPS in 30-45 minutes.
+
+================================================================================
