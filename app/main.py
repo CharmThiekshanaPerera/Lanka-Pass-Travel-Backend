@@ -67,6 +67,11 @@ async def shutdown_event():
     await close_mongo_connection()
     logger.info("MongoDB connection closed on shutdown")
 
+# Health check endpoint used by Nginx and Docker healthchecks
+@app.get("/api/v1/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
 # Dependencies
 async def get_current_user(request: Request):
     # Verbose logging for debugging the logout issue
