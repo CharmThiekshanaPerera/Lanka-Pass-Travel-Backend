@@ -1,0 +1,441 @@
+================================================================================
+GITHUB ACTIONS CI/CD - FIX AUTHENTICATION ERROR
+================================================================================
+
+Error: "fatal: could not read Username for 'https://github.com': No such device or address"
+
+Status: Fixed in updated CI_CD.md workflow
+Date: February 10, 2026
+
+================================================================================
+THE PROBLEM
+================================================================================
+
+When GitHub Actions tries to SSH into EC2 and run git commands, it fails because:
+
+1. GitHub Actions running on GitHub's servers
+2. SSH into EC2 instance (appleboy/ssh-action)
+3. Inside EC2, try to run: git fetch origin / git reset --hard origin/main
+4. EC2 has no credentials to authenticate with GitHub
+5. GitHub returns: "No such device or address" or authentication error
+
+This happens because the git command on EC2 doesn't have GitHub authentication.
+
+================================================================================
+THE SOLUTION - UPDATED WORKFLOW
+================================================================================
+
+The fixed workflow uses GitHub token-based authentication:
+
+KEY CHANGES:
+✅ Added: git config --global url with authentication token
+✅ Added: GH_TOKEN secret for private repos
+✅ Added: Proper error handling (set -e)
+✅ Added: SSL certificate verification
+✅ Added: Better logging and health checks
+
+UPDATED COMMAND IN WORKFLOW:
+────────────────────────────
+git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+This tells git: "When you see https://github.com/, use GitHub token for authentication"
+
+================================================================================
+STEP 1: CREATE GITHUB PERSONAL ACCESS TOKEN
+================================================================================
+
+Why: Your private repository needs authentication credentials
+
+Steps:
+
+1. Go to GitHub: https://github.com/settings/tokens
+
+2. Click "Generate new token" → "Token (classic)"
+
+3. Fill in:
+   Token name: Lanka Deploy Token
+   Expiration: 90 days
+   Scopes:
+     ☑ repo (Full control of private repositories)
+     ☑ read:org
+
+4. Click "Generate token"
+
+5. Copy the token immediately (won't show again!)
+   Example: ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890
+
+6. Keep this token safe!
+
+================================================================================
+STEP 2: ADD GITHUB SECRET
+================================================================================
+
+In your GitHub Repository:
+
+1. Go to: Settings → Secrets and variables → Actions
+
+2. Click "New repository secret"
+
+3. Add:
+   Name: GH_TOKEN
+   Value: ghp_aBcDeFgHiJk... (paste the token from Step 1)
+
+4. Click "Add secret"
+
+Your GitHub Actions can now use: ${{ secrets.GH_TOKEN }}
+
+================================================================================
+STEP 3: UPDATE .github/workflows/deploy.yml
+================================================================================
+
+Your workflow file should look like this:
+
+NAME: .github/workflows/deploy.yml
+────────────────────────────────────────────────────────────────────────────
+
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            
+            APP_DIR="/home/ubuntu/lanka-pass-travel-backend"
+            
+            # Clone if missing
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git "$APP_DIR"
+            fi
+            
+            cd "$APP_DIR"
+            
+            # *** KEY FIX: Configure git authentication ***
+            git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+            
+            # Now git commands will work
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Rest of deployment...
+            mkdir -p ./ssl/certs ./ssl/private
+            docker compose -f docker-compose.prod.yml down || true && sleep 3
+            docker compose -f docker-compose.prod.yml up --build -d && sleep 10
+            docker compose -f docker-compose.prod.yml ps
+            curl -k https://localhost/docs
+
+────────────────────────────────────────────────────────────────────────────
+
+CRITICAL LINE (the fix):
+git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+================================================================================
+STEP 4: VERIFY ALL SECRETS ARE SET
+================================================================================
+
+In GitHub Settings → Secrets and variables → Actions, you should have:
+
+Required:
+☑ EC2_HOST = 13.212.50.145 (or your DNS)
+☑ EC2_USER = ubuntu
+☑ EC2_SSH_KEY = (private SSH key contents)
+☑ GH_TOKEN = ghp_abc123... (from Step 1)
+
+Optional (for environment overrides):
+☐ SUPABASE_URL
+☐ SUPABASE_KEY
+
+Check these are all present before deploying.
+
+================================================================================
+STEP 5: TEST THE WORKFLOW
+================================================================================
+
+Option A: Push a test commit
+
+1. Make a small change to your repo
+2. Commit and push to main branch
+3. Go to GitHub repo → "Actions" tab
+4. Watch the workflow run
+5. Click on the job to see logs
+6. Look for: ✓ HTTPS health check passed
+
+Option B: Manually trigger workflow (if setup)
+
+1. Go to Actions tab
+2. Click "Deploy to EC2" workflow
+3. Click "Run workflow" button
+4. Watch logs
+
+Successful output should show:
+```
+✓ Pulling latest changes...
+✓ Building and starting containers with HTTPS...
+✓ HTTPS health check passed
+```
+
+================================================================================
+TROUBLESHOOTING - IF IT STILL FAILS
+================================================================================
+
+Error: "fatal: could not read Username for 'https://github.com'"
+───────────────────────────────────────────────────────────────
+Issue: git config line not working or GH_TOKEN not set
+
+Solution:
+1. Verify GH_TOKEN is in GitHub secrets
+2. Check secret name is exactly "GH_TOKEN" (case-sensitive)
+3. Verify git config line is in your workflow script
+4. Check GH_TOKEN value hasn't expired (create new one if needed)
+
+Test: Put this in your workflow to debug:
+```yaml
+script: |
+  echo "GH_TOKEN secret is set: ${{ secrets.GH_TOKEN != '' }}"
+  git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+  git config --global --list | grep github
+```
+
+---
+
+Error: "fatal: repository 'https://github.com/...' not found"
+───────────────────────────────────────────────────────────────
+Issue: GH_TOKEN is invalid or doesn't have repo access
+
+Solution:
+1. Go to: https://github.com/settings/tokens
+2. Delete old token
+3. Create NEW token with:
+   - Scopes: ✅ repo, ✅ read:org
+   - Expiration: 90 days
+4. Copy new token
+5. Update GH_TOKEN secret in GitHub repo
+6. Try workflow again
+
+---
+
+Error: "fatal: remote origin already has a url"
+───────────────────────────────────────────────
+Issue: Trying to set URL twice
+
+Solution: 
+Make sure you only have ONE git config global url line in script
+
+---
+
+Error: "Permission denied (publickey)" on SSH
+──────────────────────────────────────────────
+Issue: EC2_SSH_KEY doesn't match EC2 authorized_keys
+
+Solution:
+1. SSH into EC2 manually: ssh -i your-key.pem ubuntu@13.212.50.145
+   - If this fails, your SSH key is wrong
+2. Verify key contents match
+3. Run on EC2: cat ~/.ssh/authorized_keys
+   - Should contain your public key (if you pasted it in setup)
+
+---
+
+Error: "Docker commands not found"
+──────────────────────────────────
+Issue: SSH user doesn't have docker permissions
+
+Solution:
+SSH into EC2 and run:
+```bash
+sudo usermod -aG docker ubuntu
+# Then logout and login again
+```
+
+================================================================================
+ALTERNATIVE SOLUTION - IF YOU DON'T WANT TO USE GH_TOKEN
+================================================================================
+
+Instead of GH_TOKEN, you can use SSH for git on EC2:
+
+1. Generate SSH key ON EC2:
+   ssh -i your-key.pem ubuntu@13.212.50.145
+   ssh-keygen -t ed25519 -C "ec2-github" -f ~/.ssh/github_deploy -N ""
+
+2. Add public key to GitHub:
+   cat ~/.ssh/github_deploy.pub
+   → Copy output
+   → https://github.com/settings/keys
+   → New SSH key
+   → Paste public key
+
+3. Configure git to use SSH:
+   git config --global url.git@github.com:.insteadOf https://github.com/
+
+4. Update workflow script:
+   ```yaml
+   script: |
+     git config --global url.git@github.com:.insteadOf https://github.com/
+     cd /home/ubuntu/lanka-pass-travel-backend
+     git fetch origin
+     git reset --hard origin/main
+     # ... rest of script
+   ```
+
+This way, git uses SSH (which is already trusted on EC2).
+
+================================================================================
+VERIFY GITHUB ACTIONS RUNS SUCCESSFULLY
+================================================================================
+
+After fixing:
+
+1. Push a commit to main branch
+2. Go to repository → "Actions" tab
+3. Click the latest workflow run
+4. Watch the logs in real-time
+
+Expected successful output:
+────────────────────────────
+Run appleboy/ssh-action
+✓ Cloning repository...
+✓ Pulling latest changes...
+✓ Building and starting containers with HTTPS...
+✓ Container status: api (healthy), nginx (healthy)
+✓ HTTPS health check passed
+
+If you see "health check passed", your deployment is working!
+
+================================================================================
+VERIFY DEPLOYMENT ON EC2
+================================================================================
+
+After GitHub Actions completes:
+
+1. SSH into EC2:
+   ssh -i your-key.pem ubuntu@13.212.50.145
+
+2. Check containers:
+   cd ~/lanka-pass-travel-backend
+   docker compose -f docker-compose.prod.yml ps
+   
+   Should show both api and nginx in "Up (healthy)"
+
+3. Check logs:
+   docker compose -f docker-compose.prod.yml logs -f
+
+4. Test HTTPS:
+   curl -k https://localhost/docs
+
+5. Verify latest code was deployed:
+   git log --oneline -1
+   (Should show the latest commit you pushed)
+
+================================================================================
+COMPLETE SECRETS CHECKLIST
+================================================================================
+
+Go to: GitHub Repo → Settings → Secrets and variables → Actions
+
+Required Secrets (4):
+☑ EC2_HOST
+  Value: 13.212.50.145
+  
+☑ EC2_USER
+  Value: ubuntu
+  
+☑ EC2_SSH_KEY
+  Value: (entire contents of your github_ec2 private key file)
+  
+☑ GH_TOKEN
+  Value: ghp_abc123xyz... (Personal Access Token from GitHub)
+
+All 4 must be present for workflow to run successfully.
+
+================================================================================
+QUICK FIX CHECKLIST
+================================================================================
+
+If deployment failing:
+
+Step 1: Check Secrets
+  ☐ Go to GitHub Settings → Secrets and variables → Actions
+  ☐ Verify all 4 secrets exist: EC2_HOST, EC2_USER, EC2_SSH_KEY, GH_TOKEN
+  ☐ Verify GH_TOKEN is not expired
+  ☐ Verify secret names are exact (case-sensitive)
+
+Step 2: Check Workflow File
+  ☐ File exists: .github/workflows/deploy.yml
+  ☐ Contains line: git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/"...
+  ☐ Indentation is correct (2-space YAML indentation)
+
+Step 3: Test SSH Connection
+  ☐ Run: ssh -i github_ec2 ubuntu@13.212.50.145
+  ☐ Should connect without password
+  ☐ Run: docker ps (to verify docker access)
+
+Step 4: Manual Test Commands
+  ☐ Clone/pull should work with GH_TOKEN configured
+  ☐ Test on EC2: git config --global list (check URL rewrite)
+
+Step 5: Check Actions Log
+  ☐ Go to Actions tab
+  ☐ Click latest workflow
+  ☐ Read error message carefully
+  ☐ Search solutions below
+
+================================================================================
+COMMON SUCCESS INDICATORS
+================================================================================
+
+In GitHub Actions log, you should see:
+
+✓ "Pulling latest changes..."
+✓ "Building and starting containers with HTTPS..."
+✓ "Container status:" followed by api and nginx both "Up"
+✓ "HTTPS health check passed"
+✓ Job completed successfully
+
+If you see these, your deployment is working!
+
+================================================================================
+NEXT STEPS AFTER FIXING
+================================================================================
+
+1. Fix GitHub authentication (this guide)
+2. Push a test commit to main
+3. Watch GitHub Actions run successfully
+4. Verify containers are healthy on EC2
+5. Test API: curl -k https://13.212.50.145/docs
+6. Update frontend to use HTTPS URLs
+7. Monitor logs: docker compose -f docker-compose.prod.yml logs -f
+8. Set up domain and Let's Encrypt later (see HTTPS_SETUP_GUIDE.txt)
+
+================================================================================
+SUPPORT / DOCUMENTATION
+================================================================================
+
+For more information:
+- CI_CD.md - Complete CI/CD setup (updated)
+- AWS_EC2_SETUP.md - EC2 deployment guide
+- HTTPS_SETUP_GUIDE.txt - Domain and Let's Encrypt setup
+- HTTPS_COMPLETE_CODE.txt - All code changes
+
+================================================================================
+END OF GITHUB ACTIONS AUTHENTICATION FIX
+================================================================================
+
+Created: 2026-02-10
+Status: ✅ Ready to Deploy

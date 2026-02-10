@@ -88,30 +88,105 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script: |
-            cd /home/ubuntu/lanka-pass-travel-backend
+            set -e
             
-            # Pull latest changes
-            git pull origin main
+            APP_DIR="/home/ubuntu/lanka-pass-travel-backend"
             
-            # Update environment if .env changed
+            # Clone repository if it doesn't exist
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Cloning repository..."
+              git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git "$APP_DIR"
+            fi
+            
+            cd "$APP_DIR"
+            
+            # Configure git authentication using GitHub token
+            git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+            
+            # Fetch and reset to latest main branch
+            echo "Pulling latest changes..."
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Create SSL directories if they don't exist
+            mkdir -p ./ssl/certs ./ssl/private
+            
+            # Verify certificate exists (should be from previous setup)
+            if [ ! -f ./ssl/certs/self-signed.crt ]; then
+              echo "WARNING: SSL certificate not found. Generating new one..."
+              sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout ./ssl/private/self-signed.key \
+                -out ./ssl/certs/self-signed.crt \
+                -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
+              sudo chmod 644 ./ssl/certs/self-signed.crt ./ssl/private/self-signed.key
+              sudo chown ubuntu:ubuntu -R ./ssl
+            fi
+            
+            # Update environment if .env doesn't exist
             if [ ! -f .env ]; then
+              echo "Creating .env from .env.example..."
               cp .env.example .env
               echo "WARNING: .env created from .env.example. Please configure it!"
             fi
             
+            # Update environment variables (optional - if you have GitHub secrets)
+            # echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+            # echo "SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}" >> .env
+            
             # Stop old containers
-            docker compose -f docker-compose.prod.yml down
+            echo "Stopping old containers..."
+            docker compose -f docker-compose.prod.yml down || true
             sleep 3
             
             # Build and start new containers with HTTPS
+            echo "Building and starting containers with HTTPS..."
             docker compose -f docker-compose.prod.yml up --build -d
             sleep 10
             
             # Check containers are running
+            echo "Container status:"
             docker compose -f docker-compose.prod.yml ps
             
-            # Test HTTPS
-            curl -k https://localhost/docs || echo "HTTPS health check pending"
+            # Test HTTPS endpoint
+            echo "Testing HTTPS endpoint..."
+            curl -k https://localhost/docs > /dev/null 2>&1 && echo "✓ HTTPS health check passed" || echo "⚠ HTTPS health check pending"
+```
+
+## 7) Add GitHub Secrets
+In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
+
+**Required Secrets:**
+- `EC2_HOST` = `13.212.50.145` (or DNS name)
+- `EC2_USER` = `ubuntu`
+- `EC2_SSH_KEY` = (contents of your private SSH key file `github_ec2`)
+
+**Optional Secrets (for advanced CI/CD):**
+- `GH_TOKEN` = (GitHub Personal Access Token - for private repos)
+- `SUPABASE_URL` = (if you want to override in CI/CD)
+- `SUPABASE_KEY` = (if you want to override in CI/CD)
+
+### Create Personal Access Token (GH_TOKEN)
+If your repository is **private**, follow these steps:
+
+1. Go to GitHub Profile → **Settings → Developer settings → Personal access tokens → Tokens (classic)**
+2. Click **Generate new token (classic)**
+3. Configure:
+   - Token name: `Lanka Deploy Token`
+   - Expiration: 90 days
+   - Scopes: 
+     - ✅ `repo` (Full control of private repositories)
+     - ✅ `read:org` (Read-only access to org data)
+4. Click **Generate token** and copy it immediately
+5. Add to GitHub repo secrets as `GH_TOKEN`
+
+### Test SSH Key Works
+From your local machine:
+```bash
+# Test SSH connection
+ssh -i github_ec2 ubuntu@13.212.50.145
+
+# Should connect without password - if it does, SSH key is working
+exit
 ```
 
 ## 7) Security Group - Allow HTTPS

@@ -1,0 +1,313 @@
+================================================================================
+GITHUB ACTIONS DEPLOYMENT - QUICK REFERENCE CARD
+================================================================================
+
+Error Fixed: "fatal: could not read Username for 'https://github.com'"
+
+================================================================================
+5-MINUTE FIX
+================================================================================
+
+Step 1: Create Personal Access Token
+────────────────────────────────────
+Go to: https://github.com/settings/tokens
+1. Click "Generate new token (classic)"
+2. Name: Lanka Deploy Token
+3. Expiration: 90 days
+4. Scopes: ✅ repo, ✅ read:org
+5. Click "Generate" and copy token
+6. Token looks like: ghp_abc123xyz...
+
+Step 2: Add to GitHub Secrets
+──────────────────────────────
+In your GitHub repo:
+Settings → Secrets and variables → Actions
+New repository secret:
+  Name: GH_TOKEN
+  Value: ghp_abc123xyz... (paste from Step 1)
+
+Step 3: Update Workflow
+───────────────────────
+File: .github/workflows/deploy.yml
+Add this line in the ssh script section:
+
+    git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+Step 4: Push & Check
+──────────────────
+1. Commit changes: git add . && git commit -m "fix: update CI/CD"
+2. Push: git push origin main
+3. Go to Actions tab in GitHub
+4. Watch workflow run
+5. Should complete successfully ✓
+
+Complete workflow example: See CI_CD.md or copy below
+
+================================================================================
+COMPLETE WORKFLOW FILE
+================================================================================
+
+FILE: .github/workflows/deploy.yml
+LOCATION: Create in your repo root
+
+```yaml
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            
+            APP_DIR="/home/ubuntu/lanka-pass-travel-backend"
+            
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git "$APP_DIR"
+            fi
+            
+            cd "$APP_DIR"
+            
+            # *** THIS IS THE KEY FIX ***
+            git config --global url."https://${{ secrets.GH_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+            
+            git fetch origin
+            git reset --hard origin/main
+            
+            mkdir -p ./ssl/certs ./ssl/private
+            
+            if [ ! -f ./ssl/certs/self-signed.crt ]; then
+              sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout ./ssl/private/self-signed.key \
+                -out ./ssl/certs/self-signed.crt \
+                -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
+              sudo chmod 644 ./ssl/certs/self-signed.crt ./ssl/private/self-signed.key
+              sudo chown ubuntu:ubuntu -R ./ssl
+            fi
+            
+            if [ ! -f .env ]; then
+              cp .env.example .env
+            fi
+            
+            docker compose -f docker-compose.prod.yml down || true
+            sleep 3
+            docker compose -f docker-compose.prod.yml up --build -d
+            sleep 10
+            
+            docker compose -f docker-compose.prod.yml ps
+            curl -k https://localhost/docs > /dev/null 2>&1 && echo "✓ HTTPS OK" || echo "⚠ HTTPS Pending"
+```
+
+================================================================================
+REQUIRED GITHUB SECRETS (4 TOTAL)
+================================================================================
+
+1. EC2_HOST
+   Value: 13.212.50.145 (or your EC2 IP/DNS)
+   
+2. EC2_USER
+   Value: ubuntu
+   
+3. EC2_SSH_KEY
+   Value: (entire contents of your private key file)
+   Location to copy from: github_ec2 file (private key)
+   
+4. GH_TOKEN ← NEW (The fix!)
+   Value: ghp_abc123xyz... (Personal Access Token)
+   Source: Created at https://github.com/settings/tokens
+
+All 4 must be present in Settings → Secrets and variables → Actions
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Error: "fatal: could not read Username for 'https://github.com'"
+Fix: Make sure GH_TOKEN secret exists and git config line is in workflow
+
+Error: "Repository not found"
+Fix: GH_TOKEN doesn't have repo access
+     Create new token with ✅ repo scope at: https://github.com/settings/tokens
+
+Error: "Permission denied (publickey)"
+Fix: EC2_SSH_KEY doesn't match. SSH manually first:
+     ssh -i github_ec2 ubuntu@13.212.50.145 (should work)
+
+Error: "HTTPS health check failed"
+Fix: Containers not starting. Check on EC2:
+     ssh -i your-key.pem ubuntu@13.212.50.145
+     docker compose -f docker-compose.prod.yml logs
+
+Workflow stuck / timeout
+Fix: Check EC2 is reachable:
+     ssh -i your-key.pem ubuntu@13.212.50.145
+     If connection fails, check security group allows port 22
+
+================================================================================
+VERIFICATION
+================================================================================
+
+After workflow runs:
+
+1. Check GitHub Actions log shows: ✓ HTTPS OK
+2. SSH to EC2: ssh -i key.pem ubuntu@13.212.50.145
+3. Check containers: docker ps (should show api and nginx "Up")
+4. Test API: curl -k https://localhost/docs
+5. View latest code: git log --oneline -1 (should show your commit)
+
+If all pass → Deployment successful! ✓
+
+================================================================================
+AUTOMATED DEPLOYMENT FLOW
+================================================================================
+
+1. You commit code: git commit -m "..."
+2. You push: git push origin main
+3. GitHub Actions triggered automatically
+4. Workflow SSHes into EC2
+5. EC2 pulls latest code using GH_TOKEN
+6. Docker builds new version
+7. Containers restart with new code
+8. HTTPS endpoint tested
+9. If all OK → API live with latest code
+
+Total time: ~3-5 minutes per deployment
+
+================================================================================
+DISABLE/RE-ENABLE WORKFLOW
+================================================================================
+
+To temporarily disable CI/CD:
+Settings → Actions → General → Disable all
+
+To enable:
+Settings → Actions → General → Enable
+
+To manually trigger workflow:
+Actions → Deploy to EC2 → Run workflow (if setup)
+
+================================================================================
+RESET IF SOMETHING GOES WRONG
+================================================================================
+
+Rollback to previous version:
+
+ssh -i your-key.pem ubuntu@13.212.50.145
+cd ~/lanka-pass-travel-backend
+docker compose -f docker-compose.prod.yml down
+git reset --hard HEAD~1
+docker compose -f docker-compose.prod.yml up -d
+
+This reverts to previous commit and restarts containers.
+
+================================================================================
+MONITOR DEPLOYMENTS
+================================================================================
+
+See all workflow runs:
+GitHub repo → Actions tab
+
+Click workflow to see:
+- ✓ Status (passed/failed)
+- Timestamp of run
+- Git commit deployed
+- Full logs of each step
+
+Troubleshooting tip:
+If workflow fails, click job → scroll down to see error message
+
+================================================================================
+WORKFLOW RUNS AUTOMATICALLY ON
+================================================================================
+
+✓ Push to main branch
+✓ Merge pull request to main
+✓ Manual trigger (if enabled)
+✗ Push to other branches (dev, feature, etc.)
+
+To deploy: You must push to main branch!
+
+================================================================================
+NEXT DEPLOYMENT
+================================================================================
+
+After first successful deployment:
+
+1. Make code changes locally
+2. Commit: git commit -m "feature: description"
+3. Push to main: git push origin main
+4. GitHub Actions runs automatically
+5. Check Actions tab to monitor
+6. API updates within 3-5 minutes
+
+No manual SSH needed for future deployments!
+
+================================================================================
+SECURITY NOTES
+================================================================================
+
+🔒 Keep these safe:
+   - EC2_SSH_KEY (never commit to GitHub)
+   - GH_TOKEN (never share publicly)
+
+✅ Good practices:
+   - Rotate GH_TOKEN every 90 days
+   - Use repo scope only (not admin)
+   - Keep SSH keys private
+   - Review GitHub Actions logs for suspicious activity
+
+⚠️ Bad practices:
+   - Committing secrets to Git
+   - Using admin scopes for CI/CD tokens
+   - Sharing AWS credentials in logs
+   - Hardcoding sensitive values
+
+================================================================================
+FINAL CHECKLIST
+================================================================================
+
+Before your first deployment:
+
+☑ Created Personal Access Token (GH_TOKEN)
+☑ Added 4 secrets to GitHub (EC2_HOST, EC2_USER, EC2_SSH_KEY, GH_TOKEN)
+☑ Created .github/workflows/deploy.yml
+☑ Workflow includes git config authentication line
+☑ Tested SSH to EC2 manually (works without password)
+☑ Docker is installed on EC2
+☑ SSL certificates created on EC2 (or will be auto-created)
+☑ Pushed initial commit to main
+☑ Checked Actions tab for successful workflow run
+
+If all checkmarks done → Ready to deploy! ✓
+
+================================================================================
+STILL HAVING ISSUES?
+================================================================================
+
+Read detailed guide: GITHUB_ACTIONS_FIX.txt
+Read complete workflow: CI_CD.md
+Read deployment guide: AWS_EC2_SETUP.md
+
+Or check GitHub Actions logs for specific error message.
+
+Most common fix: Make sure GH_TOKEN is created and added to secrets!
+
+================================================================================
+END OF QUICK REFERENCE
+================================================================================
