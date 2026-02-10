@@ -7,6 +7,8 @@ Project: Lanka Pass Travel Backend
 EC2 IP: 13.212.50.145
 
 This document shows all files that have been updated for complete HTTPS support.
+Default configuration now targets Let's Encrypt certificates via /etc/letsencrypt in Docker.
+Self-signed steps remain optional and require switching nginx.conf and docker-compose.prod.yml mounts.
 
 ================================================================================
 1. UPDATED CONFIGURATION FILES
@@ -16,21 +18,20 @@ This document shows all files that have been updated for complete HTTPS support.
 **Purpose**: Reverse proxy with HTTPS/SSL support
 **Key Changes**:
 - ✅ Added HTTP to HTTPS redirect (port 80 → 443)
-- ✅ Configured SSL certificates (self-signed for testing)
+- ✅ Configured SSL certificates for Let's Encrypt (production)
 - ✅ Added security headers (HSTS, X-Content-Type-Options, etc.)
 - ✅ Configured upstream api proxy to port 8000
 - ✅ Added WebSocket support headers
 - ✅ Added timeout configurations
 
 **Current Setup**:
-- SSL Certificate: /etc/ssl/certs/self-signed.crt (Testing)
-- Private Key: /etc/ssl/private/self-signed.key (Testing)
-- For Production: /etc/letsencrypt/live/api.lankapasstravel.com/ (Let's Encrypt)
+- SSL Certificate: /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem
+- Private Key: /etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem
 
 **Testing Access**:
 ```bash
-curl -k https://13.212.50.145/docs
-curl -k https://13.212.50.145/api/v1/health
+curl https://api.lankapasstravel.com/docs
+curl https://api.lankapasstravel.com/api/v1/health
 ```
 
 ---
@@ -39,9 +40,7 @@ curl -k https://13.212.50.145/api/v1/health
 **Purpose**: Docker orchestration for production with HTTPS
 **Key Changes**:
 - ✅ Added port 443 (HTTPS) in addition to port 80 (HTTP)
-- ✅ Mounted SSL certificate directories
-  - ./ssl/certs → /etc/ssl/certs
-  - ./ssl/private → /etc/ssl/private
+- ✅ Mounted Let's Encrypt certificates from the host
 - ✅ Added healthcheck for both services
 - ✅ Created internal Docker network
 - ✅ API service health check on port 8000
@@ -49,10 +48,7 @@ curl -k https://13.212.50.145/api/v1/health
 **Certificate Mounting**:
 ```yaml
 volumes:
-  - ./ssl/certs:/etc/ssl/certs:ro
-  - ./ssl/private:/etc/ssl/private:ro
-  # For Let's Encrypt (production):
-  # - /etc/letsencrypt:/etc/letsencrypt:ro
+  - /etc/letsencrypt:/etc/letsencrypt:ro
 ```
 
 **Container Startup**:
@@ -210,15 +206,15 @@ curl https://api.lankapasstravel.com/api/v1/health
 ================================================================================
 
 ### A) HTTPS_SETUP_GUIDE.txt
-**Purpose**: Complete step-by-step guide for production HTTPS setup
+**Purpose**: Complete step-by-step guide for production HTTPS setup (Docker + Let's Encrypt)
 **Contents**:
 - Step 1: Create Elastic IP on AWS
 - Step 2: Update DNS records in HostGator
 - Step 3: Secure EC2 Security Group
-- Step 4-7: Install Certbot and get Let's Encrypt certificate
-- Step 8-10: Configure Nginx for HTTPS
-- Step 11: Test HTTPS
-- Step 12: Auto-renewal setup
+- Step 4-5: Install Certbot and get Let's Encrypt certificate
+- Step 6: Configure Docker Nginx for HTTPS
+- Step 7: Test HTTPS
+- Step 8: Auto-renewal setup
 - Troubleshooting section
 - Quick reference commands
 
@@ -258,11 +254,7 @@ Project Root:
 ├── nginx/
 │   ├── nginx.conf 🔄 [UPDATED - HTTPS Support]
 │   └── nginx.conf.backup (optional)
-├── ssl/ 🆕 [NEW - Certificate Directory]
-│   ├── certs/
-│   │   └── self-signed.crt (or fullchain.pem for Let's Encrypt)
-│   └── private/
-│       └── self-signed.key (or privkey.pem for Let's Encrypt)
+├── nginx/ (HTTPS config points to host /etc/letsencrypt)
 ├── docker-compose.prod.yml 🔄 [UPDATED - HTTPS Ports & SSL Mounts]
 ├── app/
 │   ├── main.py (No changes - FastAPI already handles HTTPS via Nginx)
@@ -290,52 +282,19 @@ Legend:
 5. HTTPS WORKFLOW - QUICK START
 ================================================================================
 
-### For Immediate Testing (5 minutes):
-
-1. SSH into EC2:
-   ```bash
-   ssh -i your-key.pem ubuntu@13.212.50.145
-   ```
-
-2. Create SSL directories:
-   ```bash
-   sudo mkdir -p ./ssl/certs ./ssl/private
-   ```
-
-3. Generate certificate:
-   ```bash
-   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-     -keyout ./ssl/private/self-signed.key \
-     -out ./ssl/certs/self-signed.crt \
-     -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
-   ```
-
-4. Start Docker with HTTPS:
-   ```bash
-   cd /home/ubuntu/lanka-pass-travel-backend
-   docker compose -f docker-compose.prod.yml up --build -d
-   ```
-
-5. Test HTTPS:
-   ```bash
-   curl -k https://13.212.50.145/docs
-   ```
-
 ### For Production (30 minutes with domain):
 
 1. Point domain DNS to EC2 IP (api.lankapasstravel.com → 13.212.50.145)
 2. Wait 5-10 minutes for DNS propagation
 3. Install Let's Encrypt:
    ```bash
-   sudo apt install -y certbot python3-certbot-nginx
+   sudo apt install -y certbot
    sudo certbot certonly --standalone -d api.lankapasstravel.com
    ```
 
-4. Update nginx.conf with correct certificate paths
-5. Restart Docker:
+4. Update nginx.conf and docker-compose.prod.yml for Let's Encrypt
+5. Start Docker:
    ```bash
-   docker compose -f docker-compose.prod.yml down && \
-   sleep 3 && \
    docker compose -f docker-compose.prod.yml up -d
    ```
 

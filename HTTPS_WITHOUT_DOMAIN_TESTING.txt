@@ -4,6 +4,9 @@ HTTPS ON EC2 IP WITHOUT DOMAIN - Testing Solutions
 
 Your EC2 IP: 13.212.50.145
 Scenario: Need HTTPS for testing before domain setup
+Note: The default setup now uses Let's Encrypt in Docker. This guide is only for
+temporary no-domain testing and requires switching nginx.conf and docker-compose.prod.yml
+back to self-signed cert mounts.
 
 ================================================================================
 OPTION 1: SELF-SIGNED CERTIFICATE (FASTEST & EASIEST)
@@ -30,14 +33,14 @@ STEPS:
 2. Install OpenSSL (usually pre-installed):
    sudo yum install openssl -y
 
-3. Create self-signed certificate:
+3. Create self-signed certificate on the host (matches the Docker mount):
    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
      -keyout /etc/ssl/private/self-signed.key \
      -out /etc/ssl/certs/self-signed.crt \
      -subj "/C=LK/ST=Western/L=Colombo/O=Travel/CN=13.212.50.145"
 
-4. Create Nginx config with HTTPS:
-   sudo nano /etc/nginx/nginx.conf
+4. Update Docker Nginx config with HTTPS:
+   nano ./nginx/nginx.conf
 
 Add this inside http {} block:
 
@@ -48,7 +51,8 @@ Add this inside http {} block:
    }
 
    server {
-       listen 443 ssl http2;
+       listen 443 ssl;
+       http2 on;
        server_name 13.212.50.145;
 
        ssl_certificate /etc/ssl/certs/self-signed.crt;
@@ -59,7 +63,7 @@ Add this inside http {} block:
        ssl_prefer_server_ciphers on;
 
        location / {
-           proxy_pass http://localhost:8000;
+           proxy_pass http://api:8000;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -67,12 +71,18 @@ Add this inside http {} block:
        }
    }
 
-5. Test Nginx config:
-   sudo nginx -t
+5. Update docker-compose.prod.yml to mount /etc/ssl and comment /etc/letsencrypt:
+   volumes:
+     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+     - /etc/ssl/certs:/etc/ssl/certs:ro
+     - /etc/ssl/private:/etc/ssl/private:ro
+     # - /etc/letsencrypt:/etc/letsencrypt:ro
 
-6. Start Nginx:
-   sudo systemctl restart nginx
-   sudo systemctl enable nginx
+6. Start Docker:
+   docker compose -f docker-compose.prod.yml up -d
+
+7. Test Nginx config:
+   docker compose -f docker-compose.prod.yml exec nginx nginx -t
 
 7. Test from local machine:
    # This will show certificate warning but works
@@ -196,8 +206,9 @@ Step 1 - Create self-signed cert (5 minutes):
      -out /etc/ssl/certs/self-signed.crt \
      -subj "/C=LK/ST=Western/L=Colombo/O=Travel/CN=13.212.50.145"
 
-Step 2 - Configure Nginx with SSL (5 minutes):
-   [Use config from OPTION 1 above]
+Step 2 - Switch Docker config to self-signed (5 minutes):
+   - Update ./nginx/nginx.conf to use /etc/ssl cert paths
+   - Update docker-compose.prod.yml to mount /etc/ssl and comment /etc/letsencrypt
 
 Step 3 - Test with curl (ignore certificate warning):
    curl -k https://13.212.50.145/api/v1/health
@@ -261,8 +272,8 @@ Once HTTPS is working, test with these commands:
    - Try API calls in Swagger UI
 
 5. Check Nginx is working:
-   sudo systemctl status nginx
-   sudo tail -f /var/log/nginx/error.log
+   docker compose -f docker-compose.prod.yml ps
+   docker compose -f docker-compose.prod.yml logs -f nginx
 
 
 ================================================================================
@@ -380,16 +391,16 @@ Test HTTPS endpoint (ignore cert warning):
   curl -k https://13.212.50.145/docs
 
 View Nginx config:
-  sudo nano /etc/nginx/nginx.conf
+  nano ./nginx/nginx.conf
 
 Test Nginx config:
-  sudo nginx -t
+  docker compose -f docker-compose.prod.yml exec nginx nginx -t
 
 Restart Nginx:
-  sudo systemctl restart nginx
+  docker compose -f docker-compose.prod.yml restart nginx
 
 View Nginx logs:
-  sudo tail -f /var/log/nginx/error.log
+  docker compose -f docker-compose.prod.yml logs -f nginx
 
 Test with specific host header:
   curl -k -H "Host: 13.212.50.145" https://13.212.50.145/docs
@@ -410,15 +421,15 @@ Solution: Check backend running on port 8000
 
 Issue: Connection refused
 Solution: Check ports allowed in security group (80, 443)
-         Check Nginx is running: sudo systemctl status nginx
+         Check Nginx is running: docker compose -f docker-compose.prod.yml ps
 
 Issue: Certificate not found after openssl command
 Solution: Check permissions: sudo ls -la /etc/ssl/certs/
          Regenerate certificate if needed
 
 Issue: Nginx won't start
-Solution: Check config: sudo nginx -t
-         View logs: sudo journalctl -u nginx -n 50
+Solution: Check config: docker compose -f docker-compose.prod.yml exec nginx nginx -t
+         View logs: docker compose -f docker-compose.prod.yml logs -f nginx
 
 
 ================================================================================

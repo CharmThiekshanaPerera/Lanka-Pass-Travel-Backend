@@ -69,14 +69,15 @@ Use Docker for local or production runs:
 
 ## HTTPS Setup
 
-### Testing (Self-Signed Certificate)
-For local testing on EC2 IP (13.212.50.145):
-- `HTTPS_WITHOUT_DOMAIN_TESTING.txt` - Quick HTTPS testing without domain
-- `SELF_SIGNED_CERT_COMMANDS.txt` - Copy-paste commands for EC2
+### Default (Let's Encrypt in Docker)
+The default configuration uses Let's Encrypt certificates mounted from `/etc/letsencrypt` in Docker.
+- `HTTPS_SETUP_GUIDE.txt` - Complete step-by-step setup for `api.lankapasstravel.com`
+- `EC2_API_CHECK.md` - Testing checklist for the domain-based HTTPS setup
 
-### Production (Let's Encrypt)
-With your domain (api.lankapasstravel.com):
-- `HTTPS_SETUP_GUIDE.txt` - Complete step-by-step HTTPS setup with Let's Encrypt
+### Optional Fallback (Self-Signed on IP)
+Use this only for temporary testing without a domain.
+- `HTTPS_WITHOUT_DOMAIN_TESTING.txt` - Self-signed HTTPS on EC2 IP
+- `SELF_SIGNED_CERT_COMMANDS.txt` - Copy-paste commands for EC2
 
 ## AWS EC2 (Beginner Guide)
 

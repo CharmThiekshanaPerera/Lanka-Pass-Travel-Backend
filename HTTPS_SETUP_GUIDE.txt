@@ -131,12 +131,15 @@ Commands (run in EC2 terminal):
    OR (if Ubuntu):
    sudo apt update -y
 
-2. Install Certbot with Nginx plugin:
-   sudo yum install certbot python3-certbot-nginx -y
-   OR (if Ubuntu):
-   sudo apt install certbot python3-certbot-nginx -y
+2. Stop Docker (to free port 80 for Certbot):
+   docker compose -f docker-compose.prod.yml down
 
-3. Generate certificate for api.lankapasstravel.com:
+3. Install Certbot:
+   sudo yum install certbot -y
+   OR (if Ubuntu):
+   sudo apt install certbot -y
+
+4. Generate certificate for api.lankapasstravel.com:
    sudo certbot certonly --standalone -d api.lankapasstravel.com
 
    When prompted:
@@ -144,7 +147,7 @@ Commands (run in EC2 terminal):
    - Agree to terms: Y
    - Share email with EFF: Y or N (your choice)
 
-4. Verify certificate was created:
+5. Verify certificate was created:
    sudo ls -la /etc/letsencrypt/live/api.lankapasstravel.com/
 
    You should see:
@@ -159,32 +162,25 @@ Certificate paths (use these later):
 
 
 ================================================================================
-STEP 6: CONFIGURE NGINX FOR HTTPS
+STEP 6: CONFIGURE DOCKER NGINX FOR HTTPS
 ================================================================================
 
-Why: Nginx will handle HTTPS and proxy requests to your Flask/FastAPI backend.
+Why: Your Nginx runs inside Docker, so SSL must be configured in the project files.
 
-1. Check if Nginx is installed:
-   sudo systemctl status nginx
+1. Update Nginx config in the repo:
+   nano ./nginx/nginx.conf
 
-   If not installed:
-   sudo yum install nginx -y
-   OR (if Ubuntu):
-   sudo apt install nginx -y
-
-2. Edit Nginx configuration:
-   sudo nano /etc/nginx/nginx.conf
-
-3. Find the http {} section and add this server block:
+2. Ensure the HTTPS server block uses Let's Encrypt paths:
 
    server {
        listen 80;
        server_name api.lankapasstravel.com;
-       return 301 https://$server_name$request_uri;
+       return 301 https://$host$request_uri;
    }
 
    server {
-       listen 443 ssl http2;
+       listen 443 ssl;
+       http2 on;
        server_name api.lankapasstravel.com;
 
        ssl_certificate /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem;
@@ -195,7 +191,7 @@ Why: Nginx will handle HTTPS and proxy requests to your Flask/FastAPI backend.
        ssl_prefer_server_ciphers on;
 
        location / {
-           proxy_pass http://localhost:8000;
+           proxy_pass http://api:8000;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -203,18 +199,16 @@ Why: Nginx will handle HTTPS and proxy requests to your Flask/FastAPI backend.
        }
    }
 
-4. Save file: Ctrl+O, Enter, Ctrl+X
+3. Update docker-compose.prod.yml to mount Let's Encrypt certs:
 
-5. Test Nginx configuration:
-   sudo nginx -t
+   volumes:
+     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+     - /etc/letsencrypt:/etc/letsencrypt:ro
 
-   Should show: "syntax is ok" and "test is successful"
+4. Save files
 
-6. Start/reload Nginx:
-   sudo systemctl restart nginx
-
-7. Enable Nginx to start on boot:
-   sudo systemctl enable nginx
+5. Start Docker with HTTPS:
+   docker compose -f docker-compose.prod.yml up -d
 
 
 ================================================================================
@@ -424,7 +418,7 @@ Solution:
 Issue: Connection refused to EC2
 Solution:
    - Check EC2 security group allows port 80, 443
-   - Check Nginx is running: sudo systemctl status nginx
+   - Check Nginx container is running: docker compose -f docker-compose.prod.yml ps
    - Check backend container is running: docker ps
 
 Issue: SSL certificate not found
@@ -442,8 +436,8 @@ Solution:
 Issue: 502 Bad Gateway from Nginx
 Solution:
    - Check backend is running on port 8000: netstat -tlnp | grep 8000
-   - Check Nginx logs: sudo tail -f /var/log/nginx/error.log
-   - Verify proxy_pass is correct: localhost:8000
+   - Check Nginx logs: docker compose -f docker-compose.prod.yml logs -f nginx
+   - Verify proxy_pass is correct: api:8000
 
 Issue: Certificate warnings in browser
 Solution:
@@ -463,14 +457,13 @@ View certificate info:
    sudo openssl x509 -in /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem -text -noout
 
 Restart Nginx:
-   sudo systemctl restart nginx
+   docker compose -f docker-compose.prod.yml restart nginx
 
 Check Nginx config:
-   sudo nginx -t
+   docker compose -f docker-compose.prod.yml exec nginx nginx -t
 
 View Nginx logs:
-   sudo tail -f /var/log/nginx/error.log
-   sudo tail -f /var/log/nginx/access.log
+   docker compose -f docker-compose.prod.yml logs -f nginx
 
 View all open ports:
    sudo netstat -tlnp

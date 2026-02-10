@@ -6,6 +6,9 @@ Project: Lanka Pass Travel Backend
 EC2 IP: 13.212.50.145
 Date: February 10, 2026
 
+Note: Default configuration now uses Let's Encrypt certificates mounted from /etc/letsencrypt.
+Self-signed sections are optional and require switching nginx.conf and docker-compose.prod.yml mounts.
+
 ================================================================================
 FILE 1: nginx/nginx.conf [UPDATED FOR HTTPS]
 ================================================================================
@@ -54,20 +57,19 @@ http {
     # HTTP to HTTPS redirect
     server {
         listen 80;
-        server_name _;
+        server_name api.lankapasstravel.com;
         return 301 https://$host$request_uri;
     }
 
     # HTTPS server with SSL
     server {
         listen 443 ssl http2;
-        server_name _;
+        server_name api.lankapasstravel.com;
 
         # SSL Certificate Configuration
-        # For Testing: Self-signed certificate at /etc/ssl/certs/self-signed.crt
         # For Production: Let's Encrypt at /etc/letsencrypt/live/api.lankapasstravel.com/
-        ssl_certificate /etc/ssl/certs/self-signed.crt;
-        ssl_certificate_key /etc/ssl/private/self-signed.key;
+        ssl_certificate /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem;
 
         # SSL Configuration
         ssl_protocols TLSv1.2 TLSv1.3;
@@ -108,9 +110,9 @@ http {
 ────────────────────────────────────────────────────────────────────────────
 
 HOW IT WORKS:
-1. User visits http://13.212.50.145 (port 80)
-2. Nginx redirects with 301 to https://13.212.50.145 (port 443)
-3. TLS handshake with /etc/ssl/certs/self-signed.crt
+1. User visits http://api.lankapasstravel.com (port 80)
+2. Nginx redirects with 301 to https://api.lankapasstravel.com (port 443)
+3. TLS handshake with Let's Encrypt cert at /etc/letsencrypt/live/api.lankapasstravel.com/
 4. Request proxied to Flask/FastAPI on localhost:8000
 5. Response includes security headers
 
@@ -121,10 +123,10 @@ FILE 2: docker-compose.prod.yml [UPDATED FOR HTTPS & PORTS]
 
 KEY CHANGES FROM ORIGINAL:
 - Added port 443 (HTTPS) alongside port 80 (HTTP)
-- Mounted SSL certificate directories from host to container
+- Mounted Let's Encrypt certificates from host to container
 - Added healthcheck for both services
 - Created internal Docker network (app-network)
-- Added commented section for Let's Encrypt production certificates
+- Kept optional self-signed mounts commented out for testing
 
 CURRENT CONTENT:
 ────────────────────────────────────────────────────────────────────────────
@@ -158,11 +160,8 @@ services:
       - \"443:443\"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # HTTPS Certificates (for testing, using self-signed)
-      - ./ssl/certs:/etc/ssl/certs:ro
-      - ./ssl/private:/etc/ssl/private:ro
       # For Let's Encrypt certificates (production)
-      # - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     restart: unless-stopped
     networks:
       - app-network
@@ -182,7 +181,7 @@ networks:
 EXPLANATION:
 - api service: Runs Flask/FastAPI on port 8000 (internal)
 - nginx service: Listens on ports 80 (HTTP) and 443 (HTTPS)
-- ssl/certs: Mounted as read-only for HTTPS certificates
+- /etc/letsencrypt: Mounted read-only from host for TLS certificates
 - healthcheck: Verifies both services are running correctly
 - app-network: Custom bridge network for service communication
 

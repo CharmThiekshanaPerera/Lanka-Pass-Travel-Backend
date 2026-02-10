@@ -1,6 +1,7 @@
 # EC2 API Check Guide
 
 Use this guide to verify your backend APIs are running on EC2 with HTTPS and to list all endpoints.
+Default configuration assumes Let's Encrypt with `api.lankapasstravel.com`.
 
 ## 1) Check Containers on EC2
 ```bash
@@ -19,27 +20,19 @@ xxxxxxxx       api:latest            Up (healthy)
 xxxxxxxx       nginx:1.25-alpine     Up (healthy)
 ```
 
-## 2) Test Locally on EC2 (HTTPS with Self-Signed Certificate)
+## 2) Test Locally on EC2 (HTTPS with Let's Encrypt - Default)
 ```bash
-# Test HTTPS endpoint (ignore self-signed cert warning)
-curl -k https://localhost/docs
-curl -k https://localhost/openapi.json
+# Test HTTPS endpoint
+curl https://api.lankapasstravel.com/docs
+curl https://api.lankapasstravel.com/openapi.json
 
 # Test HTTP redirect (should redirect to HTTPS)
-curl -L http://localhost/docs
+curl -L http://api.lankapasstravel.com/docs
 ```
 
 ## 3) Test From Your Local Machine (HTTPS)
 
-### With Self-Signed Certificate (Testing)
-```bash
-# Ignore certificate warning
-curl -k https://13.212.50.145/docs
-curl -k https://13.212.50.145/openapi.json
-curl -k https://13.212.50.145/api/v1/health
-```
-
-### With Valid Let's Encrypt Certificate (Production)
+### With Valid Let's Encrypt Certificate (Default)
 ```bash
 # No -k flag needed
 curl https://api.lankapasstravel.com/docs
@@ -47,23 +40,31 @@ curl https://api.lankapasstravel.com/openapi.json
 curl https://api.lankapasstravel.com/api/v1/health
 ```
 
+### With Self-Signed Certificate (Optional Testing)
+```bash
+# Ignore certificate warning
+curl -k https://13.212.50.145/docs
+curl -k https://13.212.50.145/openapi.json
+curl -k https://13.212.50.145/api/v1/health
+```
+
 ## 4) Test API Endpoints
 
 ### Health Check
 ```bash
-curl -k https://13.212.50.145/api/v1/health
+curl https://api.lankapasstravel.com/api/v1/health
 ```
 
 ### Vendor Registration
 ```bash
-curl -k -X POST https://13.212.50.145/api/v1/vendors \
+curl -X POST https://api.lankapasstravel.com/api/v1/vendors \
   -H "Content-Type: application/json" \
   -d '{"email":"vendor@example.com","password":"password123"}'
 ```
 
 ### Admin Login
 ```bash
-curl -k -X POST https://13.212.50.145/api/v1/admin/login \
+curl -X POST https://api.lankapasstravel.com/api/v1/admin/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"password123"}'
 ```
@@ -71,7 +72,7 @@ curl -k -X POST https://13.212.50.145/api/v1/admin/login \
 ### List All Endpoints (from OpenAPI)
 ```bash
 # Download OpenAPI spec
-curl -sk https://13.212.50.145/openapi.json > openapi.json
+curl -s https://api.lankapasstravel.com/openapi.json > openapi.json
 
 # Parse and display all endpoints
 python3 - <<'PY'
@@ -86,7 +87,19 @@ PY
 
 ## 5) Test Certificate Installation
 
-### View Self-Signed Certificate Details
+### View Let's Encrypt Certificate Details (Default)
+```bash
+# Check certificate path
+sudo certbot certificates
+
+# View certificate info
+sudo openssl x509 -in /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem -text -noout
+
+# Check auto-renewal status
+sudo systemctl status certbot.timer
+```
+
+### View Self-Signed Certificate Details (Optional Testing)
 ```bash
 # Check certificate paths
 sudo ls -la /etc/ssl/certs/self-signed.crt
@@ -99,35 +112,17 @@ sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -text -noout
 sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -noout -dates
 ```
 
-### View Let's Encrypt Certificate Details (Production)
-```bash
-# Check certificate path
-sudo certbot certificates
-
-# View certificate info
-sudo openssl x509 -in /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem -text -noout
-
-# Check auto-renewal status
-sudo systemctl status certbot.timer
-```
-
 ## 6) Test SSL/TLS Connection
 ```bash
 # View SSL handshake details
-echo | openssl s_client -connect 13.212.50.145:443 -servername 13.212.50.145
+echo | openssl s_client -connect api.lankapasstravel.com:443 -servername api.lankapasstravel.com
 
 # Or using curl with verbose output
-curl -kv https://13.212.50.145/docs 2>&1 | grep -E "SSL|TLS|certificate"
+curl -kv https://api.lankapasstravel.com/docs 2>&1 | grep -E "SSL|TLS|certificate"
 ```
 
 ## 7) View Nginx Logs
 ```bash
-# Access logs (requests)
-sudo tail -f /var/log/nginx/access.log
-
-# Error logs (debugging)
-sudo tail -f /var/log/nginx/error.log
-
 # Docker logs
 docker compose -f docker-compose.prod.yml logs -f nginx
 ```
@@ -148,14 +143,11 @@ echo "Check AWS Security Group for TCP 443"
 
 ### SSL Certificate not found
 ```bash
-# Verify certificate location
-sudo ls -la /etc/ssl/certs/self-signed.crt
+# Verify Let's Encrypt cert location
+sudo ls -la /etc/letsencrypt/live/api.lankapasstravel.com/
 
-# Regenerate if missing
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/ssl/private/self-signed.key \
-  -out /etc/ssl/certs/self-signed.crt \
-  -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
+# Re-run Certbot if missing
+sudo certbot certonly --standalone -d api.lankapasstravel.com
 
 # Restart nginx
 docker compose -f docker-compose.prod.yml restart nginx
@@ -164,7 +156,7 @@ docker compose -f docker-compose.prod.yml restart nginx
 ### HTTP not redirecting to HTTPS
 ```bash
 # Test redirect
-curl -L http://13.212.50.145/docs -w "\nStatus: %{http_code}\n"
+curl -L http://api.lankapasstravel.com/docs -w "\nStatus: %{http_code}\n"
 
 # Check nginx config for redirect rule
 docker compose -f docker-compose.prod.yml exec nginx nginx -t
