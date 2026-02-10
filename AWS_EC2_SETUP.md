@@ -1,6 +1,6 @@
 # AWS EC2 Setup Guide (Beginner Friendly)
 
-This guide shows how to deploy this API on an AWS EC2 instance using Docker.
+This guide shows how to deploy this API on an AWS EC2 instance using Docker with HTTPS.
 It assumes you are using Ubuntu 22.04 LTS.
 
 ## 1) Create an AWS Account
@@ -22,6 +22,7 @@ It assumes you are using Ubuntu 22.04 LTS.
 6. Create or edit the Security Group:
    - Allow `SSH` (port 22) from your IP.
    - Allow `HTTP` (port 80) from `0.0.0.0/0`.
+   - **Allow `HTTPS` (port 443) from `0.0.0.0/0`.**
    - Optional: allow `Custom TCP` port `8000` from `0.0.0.0/0` for direct access.
 7. Click `Launch instance`.
 
@@ -29,13 +30,25 @@ Current EC2:
 - Public IPv4: `13.212.50.145`
 - Public DNS: `ec2-13-212-50-145.ap-southeast-1.compute.amazonaws.com`
 
-## 4) Connect to Your Instance
+## 4) Create Elastic IP (Static IP - Recommended)
+For a permanent IP that doesn't change on restart:
+1. Go to EC2 → Elastic IPs
+2. Click "Allocate Elastic IP address"
+3. Select your region: ap-southeast-1
+4. Click "Allocate"
+5. Select the new IP, click "Associate this Elastic IP address"
+6. Select your EC2 instance
+7. Click "Associate"
+
+Now your EC2 has a permanent static IP.
+
+## 5) Connect to Your Instance
 From your local machine:
 ```bash
 ssh -i /path/to/key.pem ubuntu@13.212.50.145
 ```
 
-## 5) Install Docker on EC2
+## 6) Install Docker on EC2
 Option A (recommended): Docker official repo (includes Compose plugin)
 ```bash
 sudo apt update
@@ -69,7 +82,7 @@ docker compose version   # if you installed the plugin
 docker-compose --version # if you installed classic compose
 ```
 
-## 6) Upload or Clone Your Project
+## 7) Upload or Clone Your Project
 Option A: Clone (recommended)
 ```bash
 git clone https://github.com/CharmThiekshanaPerera/Lanka-Pass-Travel-Backend.git /home/ubuntu/lanka-pass-travel-backend
@@ -85,33 +98,176 @@ Then on EC2:
 cd "/home/ubuntu/lanka-pass-travel-backend"
 ```
 
-## 7) Create the .env File
+## 8) Create the .env File
 ```bash
 cp .env.example .env
-nano .env
+sudo nano .env
 ```
 Fill in all required values (Supabase keys, etc.).
 
-## 8) Build and Run (Production with Nginx)
+## 9a) Setup HTTPS - Self-Signed Certificate (For Testing)
+Create SSL directories and certificate:
+```bash
+# Create SSL directories
+sudo mkdir -p ./ssl/certs ./ssl/private
+
+# Generate self-signed certificate (valid for 365 days)
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ./ssl/private/self-signed.key \
+  -out ./ssl/certs/self-signed.crt \
+  -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
+
+# Fix permissions
+sudo chmod 644 ./ssl/certs/self-signed.crt
+sudo chmod 644 ./ssl/private/self-signed.key
+sudo chown $USER:$USER -R ./ssl
+```
+
+Verify certificate was created:
+```bash
+ls -la ./ssl/certs/
+ls -la ./ssl/private/
+```
+
+## 9b) Setup HTTPS - Let's Encrypt Certificate (For Production with Domain)
+Once you have a domain (api.lankapasstravel.com):
+
+1. Point your domain DNS to the EC2 IP
+2. Wait 5-10 minutes for DNS propagation
+3. Install Certbot:
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+
+# Generate certificate
+sudo certbot certonly --standalone -d api.lankapasstravel.com
+
+# Verify certificate
+sudo certbot certificates
+```
+
+4. Update `nginx.conf` to use Let's Encrypt certificates:
+   - Change `/etc/ssl/certs/self-signed.crt` to `/etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem`
+   - Change `/etc/ssl/private/self-signed.key` to `/etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem`
+
+5. Restart containers:
+```bash
+docker compose -f docker-compose.prod.yml down
+sleep 3
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## 10) Build and Run (Production with Nginx & HTTPS)
 ```bash
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-## 9) Check It Works
+Wait 10 seconds for containers to start:
 ```bash
+sleep 10
+```
+
+## 11) Check It Works
+```bash
+# Check containers
 docker ps
-curl http://13.212.50.145/docs
+
+# Should show both api and nginx containers in "Up" state
+```
+
+### Test HTTPS with Self-Signed Certificate
+```bash
+# From your local machine (ignore certificate warning)
+curl -k https://13.212.50.145/docs
+
+# Test API health
+curl -k https://13.212.50.145/api/v1/health
+```
+
+### Test HTTPS with Valid Certificate (Production)
+```bash
+# No -k flag needed with Let's Encrypt cert
+curl https://api.lankapasstravel.com/docs
+curl https://api.lankapasstravel.com/api/v1/health
+```
+
+## 12) View Logs
+```bash
+# View all containers logs
+docker compose -f docker-compose.prod.yml logs -f
+
+# View specific service
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs -f nginx
 ```
 
 ## Common Issues
-- **Connection refused**: Check security group ports.
-- **Invalid .env**: Make sure all required values are set.
-- **Container not running**: Use logs to see errors:
-  ```bash
-  docker compose -f docker-compose.prod.yml logs -f
-  ```
+
+### Connection refused / No response
+1. Check security group allows ports 80, 443:
+   - Go to EC2 → Security Groups → Edit inbound rules
+   - Verify HTTP (80) and HTTPS (443) are open
+   
+2. Check containers are running:
+   ```bash
+   docker ps
+   docker compose -f docker-compose.prod.yml ps
+   ```
+
+3. Check Nginx configuration:
+   ```bash
+   cat ./nginx/nginx.conf
+   ```
+
+### SSL Certificate not found
+```bash
+# Verify certificate location
+ls -la ./ssl/
+
+# Regenerate if missing
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ./ssl/private/self-signed.key \
+  -out ./ssl/certs/self-signed.crt \
+  -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=13.212.50.145"
+```
+
+### Invalid .env
+Make sure all required values are set:
+```bash
+sudo nano .env
+# Fill in SUPABASE_URL, SUPABASE_KEY, etc.
+```
+
+### Container stuck or not responding
+```bash
+# View detailed logs
+docker compose -f docker-compose.prod.yml logs -f
+
+# Restart containers
+docker compose -f docker-compose.prod.yml restart
+
+# Full restart
+docker compose -f docker-compose.prod.yml down
+sleep 3
+docker compose -f docker-compose.prod.yml up -d
+```
 
 ## Stop and Remove
 ```bash
 docker compose -f docker-compose.prod.yml down
 ```
+
+## Update & Redeploy
+When you push to GitHub (CI/CD):
+```bash
+# Manual update/redeploy:
+cd /home/ubuntu/lanka-pass-travel-backend
+git pull origin main
+docker compose -f docker-compose.prod.yml down
+sleep 3
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+## API Documentation
+Once running with HTTPS:
+- **Testing (Self-Signed)**: https://13.212.50.145/docs
+- **Production (Let's Encrypt)**: https://api.lankapasstravel.com/docs

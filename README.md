@@ -65,17 +65,28 @@ The server will start at `http://localhost:8000` with auto-reload enabled.
 ## Docker
 
 Use Docker for local or production runs:
-- `DOCKER.md`
+- `DOCKER.md` - Complete Docker setup and HTTPS configuration
+
+## HTTPS Setup
+
+### Testing (Self-Signed Certificate)
+For local testing on EC2 IP (13.212.50.145):
+- `HTTPS_WITHOUT_DOMAIN_TESTING.txt` - Quick HTTPS testing without domain
+- `SELF_SIGNED_CERT_COMMANDS.txt` - Copy-paste commands for EC2
+
+### Production (Let's Encrypt)
+With your domain (api.lankapasstravel.com):
+- `HTTPS_SETUP_GUIDE.txt` - Complete step-by-step HTTPS setup with Let's Encrypt
 
 ## AWS EC2 (Beginner Guide)
 
-Deploy to EC2 with step-by-step instructions:
-- `AWS_EC2_SETUP.md`
+Deploy to EC2 with step-by-step instructions including HTTPS:
+- `AWS_EC2_SETUP.md` - EC2 instance setup with Docker and HTTPS
 
 ## CI/CD (GitHub Actions → EC2)
 
-Automated deploy on every push to `main`:
-- `CI_CD.md`
+Automated deploy on every push to `main` with HTTPS support:
+- `CI_CD.md` - CI/CD pipeline with HTTPS enabled
 
 ### API Documentation
 

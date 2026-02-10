@@ -1,0 +1,361 @@
+================================================================================
+SELF-SIGNED CERTIFICATE INSTALLATION COMMANDS
+================================================================================
+
+Environment: Ubuntu 22.04 LTS on EC2
+IP Address: 13.212.50.145 (or your current IP)
+Current Directory: ~/lanka-pass-travel-backend
+Docker Setup: Using docker-compose.prod.yml with Nginx
+
+================================================================================
+STEP 1: VERIFY YOUR CURRENT SETUP
+================================================================================
+
+# Check you're in the right directory:
+pwd
+
+# Should output: /home/ubuntu/lanka-pass-travel-backend
+
+# Check containers are running:
+docker compose -f docker-compose.prod.yml ps
+
+# Should show: api and nginx containers in "Up" state
+
+# Test current HTTP access:
+curl http://localhost/docs
+curl http://13.212.50.145/docs
+
+================================================================================
+STEP 2: CREATE SELF-SIGNED CERTIFICATE
+================================================================================
+
+# Set your IP variable (replace with your actual IP if different):
+export EC2_IP="13.212.50.145"
+
+# Create SSL directory:
+sudo mkdir -p /etc/ssl/private /etc/ssl/certs
+
+# Generate the self-signed certificate (valid for 365 days):
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/self-signed.key \
+  -out /etc/ssl/certs/self-signed.crt \
+  -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=$EC2_IP"
+
+# Verify certificate was created:
+sudo ls -la /etc/ssl/certs/self-signed.crt
+sudo ls -la /etc/ssl/private/self-signed.key
+
+# Check certificate details:
+sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -text -noout
+
+================================================================================
+STEP 3: BACKUP CURRENT NGINX CONFIG
+================================================================================
+
+# Backup your current nginx.conf before making changes:
+sudo cp ./nginx/nginx.conf ./nginx/nginx.conf.backup
+
+# Verify backup was created:
+ls -la ./nginx/
+
+================================================================================
+STEP 4: UPDATE NGINX CONFIG FOR HTTPS
+================================================================================
+
+# View current nginx config:
+cat ./nginx/nginx.conf
+
+# Open nginx config for editing:
+sudo nano ./nginx/nginx.conf
+
+# === REPLACE THE ENTIRE FILE WITH THIS CONFIG: ===
+
+# Copy everything between === marks below and paste into nano:
+
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+    access_log /var/log/nginx/access.log main;
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    client_max_body_size 20M;
+
+    # HTTP redirect to HTTPS
+    server {
+        listen 80;
+        server_name _;
+        return 301 https://$host$request_uri;
+    }
+
+    # HTTPS server with self-signed cert
+    server {
+        listen 443 ssl http2;
+        server_name _;
+
+        # SSL certificate paths
+        ssl_certificate /etc/ssl/certs/self-signed.crt;
+        ssl_certificate_key /etc/ssl/private/self-signed.key;
+
+        # SSL configuration
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_timeout 10m;
+
+        # Proxy to Flask/FastAPI backend
+        location / {
+            proxy_pass http://api:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_redirect off;
+            
+            # WebSocket support (if needed)
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+}
+
+# === END OF CONFIG ===
+
+# After pasting:
+# Press: Ctrl+O (save)
+# Press: Enter (confirm filename)
+# Press: Ctrl+X (exit nano)
+
+================================================================================
+STEP 5: VERIFY NGINX CONFIG & RESTART CONTAINERS
+================================================================================
+
+# Check the config looks correct:
+cat ./nginx/nginx.conf
+
+# Verify Docker can read the modified config (no permission errors):
+sudo docker compose -f docker-compose.prod.yml config > /dev/null
+
+# Restart Docker containers to apply changes:
+sudo docker compose -f docker-compose.prod.yml down
+
+# Wait 3 seconds for containers to stop:
+sleep 3
+
+# Bring containers back up with the updated config:
+sudo docker compose -f docker-compose.prod.yml up -d
+
+# Wait 5 seconds for Nginx to start:
+sleep 5
+
+# Check containers are running:
+docker compose -f docker-compose.prod.yml ps
+
+# Should show both api and nginx in "Up" state
+
+# View logs to check for errors:
+docker compose -f docker-compose.prod.yml logs -f
+
+# Press Ctrl+C to exit logs when satisfied
+
+================================================================================
+STEP 6: TEST HTTPS CONNECTION
+================================================================================
+
+# Test HTTPS locally on EC2 (ignore self-signed cert warning):
+curl -k https://localhost/docs
+
+# Test from your local machine (ignore self-signed cert warning):
+# Replace with your actual EC2 IP:
+curl -k https://13.212.50.145/docs
+
+# Test API endpoints:
+curl -k https://13.212.50.145/api/v1/health
+
+# Test with verbose output to see certificate details:
+curl -kv https://13.212.50.145/docs
+
+================================================================================
+STEP 7: VERIFY IN BROWSER (OPTIONAL)
+================================================================================
+
+# Open browser and go to:
+https://13.212.50.145/docs
+
+# You will see "Not Secure" warning because certificate is self-signed
+# This is EXPECTED and NORMAL for testing
+
+# Click "Advanced" and then "Proceed to 13.212.50.145 (unsafe)"
+# Your API documentation should load with HTTPS!
+
+# To bypass certificate warnings in automated scripts:
+# Python:
+python3 << 'PYTHON'
+import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+response = requests.get('https://13.212.50.145/docs', verify=False)
+print(response.status_code)
+PYTHON
+
+# Or using curl:
+curl -k https://13.212.50.145/api/v1/health
+
+================================================================================
+STEP 8: VERIFY CERTIFICATE INSTALLATION
+================================================================================
+
+# Check certificate is valid:
+sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -text
+
+# Check certificate expiry:
+sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -noout -dates
+
+# Check certificate issuer:
+sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -noout -issuer
+
+# Check certificate subject:
+sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -noout -subject
+
+# View Nginx logs to confirm HTTPS is working:
+sudo tail -f /var/log/nginx/access.log
+
+# Make a request to see logs:
+curl -k https://13.212.50.145/docs
+
+# Press Ctrl+C to exit logs
+
+================================================================================
+TROUBLESHOOTING COMMANDS
+================================================================================
+
+# If containers won't start:
+docker compose -f docker-compose.prod.yml logs
+
+# If Nginx config has syntax errors:
+sudo docker compose -f docker-compose.prod.yml config
+
+# Restart just Nginx container:
+docker compose -f docker-compose.prod.yml restart nginx
+
+# Check if ports 80 and 443 are open:
+sudo netstat -tlnp | grep -E ':80|:443'
+
+# Check security group allows HTTP and HTTPS:
+# (Check in AWS console under your instance's security group)
+
+# Test SSL/TLS connection details:
+openssl s_client -connect 13.212.50.145:443
+
+# Force restart everything:
+docker compose -f docker-compose.prod.yml down -v
+docker compose -f docker-compose.prod.yml up --build -d
+
+# View all running containers:
+docker ps
+
+# Check nginx error log:
+sudo tail -f /var/log/nginx/error.log
+
+================================================================================
+QUICK COMMAND REFERENCE
+================================================================================
+
+# Single command to install self-signed cert:
+export EC2_IP="13.212.50.145" && \
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/self-signed.key \
+  -out /etc/ssl/certs/self-signed.crt \
+  -subj "/C=LK/ST=Western/L=Colombo/O=TravelApp/CN=$EC2_IP"
+
+# Restart containers with new config:
+docker compose -f docker-compose.prod.yml down && sleep 3 && \
+docker compose -f docker-compose.prod.yml up -d
+
+# Test HTTPS:
+curl -k https://13.212.50.145/docs
+
+================================================================================
+EXPECTED OUTPUT
+================================================================================
+
+After successful setup:
+
+$ curl -k https://13.212.50.145/docs
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FastAPI</title>
+    ...
+(HTML content of Swagger UI documentation)
+
+$ curl https://13.212.50.145/docs
+curl: (60) SSL certificate problem: self signed certificate
+(This is NORMAL - use -k flag to bypass)
+
+$ curl -k https://13.212.50.145/api/v1/health
+{"status":"ok"}
+(Or similar response from your backend)
+
+================================================================================
+WHEN SWITCHING TO REAL DOMAIN & CERTIFICATE
+================================================================================
+
+Once you have your domain (api.lankapasstravel.com) ready:
+
+# Backup self-signed cert setup:
+sudo cp /etc/ssl/certs/self-signed.crt /etc/ssl/certs/self-signed.crt.backup
+sudo cp /etc/ssl/private/self-signed.key /etc/ssl/private/self-signed.key.backup
+
+# Install Let's Encrypt certificate:
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot certonly --standalone -d api.lankapasstravel.com
+
+# Update nginx/nginx.conf to use new cert paths:
+# Replace:
+#   ssl_certificate /etc/ssl/certs/self-signed.crt;
+#   ssl_certificate_key /etc/ssl/private/self-signed.key;
+# With:
+#   ssl_certificate /etc/letsencrypt/live/api.lankapasstravel.com/fullchain.pem;
+#   ssl_certificate_key /etc/letsencrypt/live/api.lankapasstravel.com/privkey.pem;
+
+# Restart containers:
+docker compose -f docker-compose.prod.yml down && sleep 3 && \
+docker compose -f docker-compose.prod.yml up -d
+
+# Test with trusted certificate:
+curl https://api.lankapasstravel.com/docs
+# (No -k flag needed, certificate is trusted!)
+
+================================================================================
+FINAL CHECKLIST
+================================================================================
+
+☐ Certificate created at /etc/ssl/certs/self-signed.crt
+☐ Private key created at /etc/ssl/private/self-signed.key
+☐ Nginx config updated with SSL paths
+☐ Containers restarted with new config
+☐ curl -k https://13.212.50.145/docs returns HTML (not error)
+☐ Browser shows HTTPS connection (with self-signed warning)
+☐ API endpoints respond via HTTPS
+☐ Frontend updated to use https://13.212.50.145 (or API subdomain)
+
+If all checkmarks are done, HTTPS on EC2 is working! ✓
+
+================================================================================

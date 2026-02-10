@@ -1,0 +1,442 @@
+================================================================================
+HTTPS ON EC2 IP WITHOUT DOMAIN - Testing Solutions
+================================================================================
+
+Your EC2 IP: 13.212.50.145
+Scenario: Need HTTPS for testing before domain setup
+
+================================================================================
+OPTION 1: SELF-SIGNED CERTIFICATE (FASTEST & EASIEST)
+================================================================================
+
+Best for: Quick local/internal testing, dev environment, testing API endpoints
+
+Pros:
+  ✓ Free
+  ✓ Works immediately
+  ✓ No domain needed
+  ✓ Takes 5 minutes to set up
+  
+Cons:
+  ✗ Browser shows "Not Secure" warning
+  ✗ Certificate not trusted by browsers
+  ✗ Testing tools must ignore certificate errors
+
+STEPS:
+
+1. SSH into EC2:
+   ssh -i your-key.pem ec2-user@13.212.50.145
+
+2. Install OpenSSL (usually pre-installed):
+   sudo yum install openssl -y
+
+3. Create self-signed certificate:
+   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /etc/ssl/private/self-signed.key \
+     -out /etc/ssl/certs/self-signed.crt \
+     -subj "/C=LK/ST=Western/L=Colombo/O=Travel/CN=13.212.50.145"
+
+4. Create Nginx config with HTTPS:
+   sudo nano /etc/nginx/nginx.conf
+
+Add this inside http {} block:
+
+   server {
+       listen 80;
+       server_name 13.212.50.145;
+       return 301 https://$host$request_uri;
+   }
+
+   server {
+       listen 443 ssl http2;
+       server_name 13.212.50.145;
+
+       ssl_certificate /etc/ssl/certs/self-signed.crt;
+       ssl_certificate_key /etc/ssl/private/self-signed.key;
+
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_ciphers HIGH:!aNULL:!MD5;
+       ssl_prefer_server_ciphers on;
+
+       location / {
+           proxy_pass http://localhost:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto https;
+       }
+   }
+
+5. Test Nginx config:
+   sudo nginx -t
+
+6. Start Nginx:
+   sudo systemctl restart nginx
+   sudo systemctl enable nginx
+
+7. Test from local machine:
+   # This will show certificate warning but works
+   curl -k https://13.212.50.145/docs
+   
+   # Using Python (ignores cert warning):
+   curl -k https://13.212.50.145/api/v1/health
+
+8. In browser: https://13.212.50.145
+   - You'll see "Not Secure" warning
+   - Click "Advanced" → "Proceed anyway"
+   - Your API loads with HTTPS!
+
+   To bypass warning in browser Dev Tools (F12) Network tab, just click through.
+
+
+================================================================================
+OPTION 2: USE TEMPORARY FREE DOMAIN WITH NGROK/CLOUDFLARE
+================================================================================
+
+Best for: When you need a valid trusted certificate for testing
+
+Pros:
+  ✓ Valid SSL certificate
+  ✓ No browser warnings
+  ✓ Free
+  ✓ Temporary during testing
+  
+Cons:
+  ✗ Requires external service
+  ✗ Domain changes on restart (ngrok)
+  ✗ Slightly slower
+
+METHOD A: Using Ngrok (Easiest)
+
+1. Download Ngrok: https://ngrok.com/download
+
+2. Extract and run:
+   ngrok http 8000
+   
+   This creates a public HTTPS tunnel to your local port 8000
+
+3. You get a URL like: https://abc123def45.ngrok.io
+   - This URL has valid SSL
+   - Points to your local machine port 8000
+
+4. For EC2, use:
+   ngrok tcp 13.212.50.145:8000
+
+5. Access your API with HTTPS and valid certificate
+
+Problem: URL changes every time you restart ngrok (free plan)
+Solution: Get ngrok pro account or use next method
+
+
+METHOD B: Using Cloudflare Tunnel (Free & Permanent)
+
+1. Install Cloudflare CLI (warp):
+   curl https://pkg.cloudflare.dev/index.html | bash
+
+2. For EC2, use Cloudflare Tunnel:
+   - Create free Cloudflare account
+   - Create tunnel to your EC2 IP
+   - Get a free subdomain
+
+3. Access with HTTPS through Cloudflare
+
+
+=================================================================================
+OPTION 3: AWS CERTIFICATE MANAGER + LOAD BALANCER (For Production)
+=================================================================================
+
+Best for: Production-ready, want valid SSL on IP via AWS services
+
+How it works:
+  - AWS Certificate Manager (free)
+  - Application Load Balancer (small cost ~$15/month)
+  - You access ALB's IP/domain with valid SSL
+  - ALB forwards to your EC2 backend
+
+Not recommended for immediate testing - takes longer to set up but very professional.
+
+
+================================================================================
+OPTION 4: TEMPORARY FIX - TEST WITHOUT HTTPS FIRST
+================================================================================
+
+If you just need to test API functionality:
+
+1. Keep backend on HTTP: http://13.212.50.145:8000/api/...
+
+2. Update frontend to call HTTP endpoints (temporary)
+
+3. Once domain is ready, switch to HTTPS
+
+4. Use this for quick testing of logic before HTTPS setup
+
+
+================================================================================
+QUICK COMPARISON
+================================================================================
+
+Method                  Time    Cost    Trusted Cert    Domain Needed
+──────────────────────────────────────────────────────────────────────
+Self-signed (Opt 1)     5min    Free    No              No ✓
+Ngrok (Opt 2A)          10min   Free    Yes             No (temp)
+Cloudflare (Opt 2B)     15min   Free    Yes             Yes (free sub)
+AWS ACM+ALB (Opt 3)     30min   $15/mo  Yes             No
+HTTP testing (Opt 4)    2min    Free    No              No ✓
+
+
+================================================================================
+RECOMMENDED: Self-Signed Certificate (OPTION 1)
+================================================================================
+
+If you just need HTTPS to work for testing internally or with API tools:
+
+Step 1 - Create self-signed cert (5 minutes):
+   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /etc/ssl/private/self-signed.key \
+     -out /etc/ssl/certs/self-signed.crt \
+     -subj "/C=LK/ST=Western/L=Colombo/O=Travel/CN=13.212.50.145"
+
+Step 2 - Configure Nginx with SSL (5 minutes):
+   [Use config from OPTION 1 above]
+
+Step 3 - Test with curl (ignore certificate warning):
+   curl -k https://13.212.50.145/api/v1/health
+
+Step 4 - Update Python/Node requests to ignore SSL:
+
+   Python requests:
+   import requests
+   requests.packages.urllib3.disable_warnings()
+   response = requests.get('https://13.212.50.145/api/v1/health', verify=False)
+
+   JavaScript fetch:
+   fetch('https://13.212.50.145/api/v1/health', {
+       method: 'GET',
+       headers: {},
+       // Note: fetch doesn't have built-in way to ignore cert in Node.js
+       // Use custom agent for Node.js
+   })
+
+   cURL command:
+   curl -k https://13.212.50.145/docs
+
+
+================================================================================
+IF YOU HAVE A TEMPORARY DOMAIN
+================================================================================
+
+If you register even a temporary domain (or use subdomain from existing domain):
+
+1. Point domain to 13.212.50.145 in DNS
+2. Wait 5-10 minutes
+3. Use Let's Encrypt Certbot:
+
+   sudo certbot certonly --standalone -d yourdomain.com
+   
+4. Configure Nginx with Let's Encrypt cert
+5. Full trusted HTTPS with domain!
+
+
+================================================================================
+TESTING YOUR HTTPS EC2 API
+================================================================================
+
+Once HTTPS is working, test with these commands:
+
+1. Test self-signed cert (with warning bypass):
+   curl -k https://13.212.50.145/docs
+
+2. Check certificate details:
+   sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -text -noout
+
+3. Test REST endpoint:
+   curl -k -X POST https://13.212.50.145/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@test.com","password":"password"}'
+
+4. From browser:
+   https://13.212.50.145/docs
+   - Click "Advanced"
+   - Click "Proceed to 13.212.50.145 (unsafe)"
+   - Try API calls in Swagger UI
+
+5. Check Nginx is working:
+   sudo systemctl status nginx
+   sudo tail -f /var/log/nginx/error.log
+
+
+================================================================================
+FRONTEND CODE UPDATES FOR TESTING HTTPS/IP
+================================================================================
+
+For local testing with self-signed cert, update your frontend:
+
+JavaScript/React:
+
+// For production (with domain and valid cert)
+const API_URL = 'https://api.lankapasstravel.com';
+
+// For testing (with IP and self-signed cert)
+const API_URL = 'https://13.212.50.145';
+
+// For development (HTTP only)
+const API_URL = 'http://13.212.50.145:8000';
+
+Using with fetch:
+
+fetch(`${API_URL}/api/v1/vendors`, {
+    method: 'GET',
+    headers: {
+        'Content-Type': 'application/json'
+    }
+})
+.then(res => res.json())
+.catch(err => console.error('API Error:', err));
+
+For self-signed certs in Node.js/testing tools:
+
+// Node.js - ignore certificate
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+const https = require('https');
+const agent = new https.Agent({
+    rejectUnauthorized: false
+});
+
+fetch('https://13.212.50.145/api/v1/health', {
+    agent: agent
+});
+
+
+================================================================================
+POSTMAN TESTING WITH SELF-SIGNED CERT
+================================================================================
+
+1. Open Postman
+2. Create request to: https://13.212.50.145/api/v1/health
+3. Click "Settings" gear icon (top right)
+4. Go to "Settings" tab
+5. Under "SSL certificate verification" toggle OFF
+6. Now you can test your EC2 API with self-signed cert
+7. Send your request - should work!
+
+
+================================================================================
+TRANSITION PLAN: IP TESTING → DOMAIN + HTTPS
+================================================================================
+
+Phase 1 (Current - Next 1-2 days): TESTING
+├── Use self-signed cert on 13.212.50.145
+├── Test all API endpoints work with HTTPS
+├── Verify frontend can call API
+└── Make sure backend logic is correct
+
+Phase 2 (When ready): ADD REAL DOMAIN
+├── Configure DNS: api.lankapasstravel.com → 13.212.50.145
+├── Install Let's Encrypt certificate
+├── Update Nginx config with valid cert
+└── Update frontend to use api.lankapasstravel.com
+
+Phase 3 (Optional): USE AWS ELASTIC IP
+├── Request Elastic IP (permanent static IP)
+├── Useful if you're doing more testing
+└── More reliable than dynamic public IP
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Quick Start (5 minutes):
+1. SSH to EC2
+2. Create self-signed cert with openssl
+3. Configure Nginx with SSL
+4. Test with: curl -k https://13.212.50.145/docs
+
+That's it! You have HTTPS on your EC2 IP.
+
+When ready with domain (30 minutes more):
+1. Point domain to EC2 IP
+2. Install Let's Encrypt cert
+3. Update Nginx config with trusted cert
+4. Delete self-signed cert
+5. Update frontend to use domain
+
+
+================================================================================
+COMMANDS CHEAT SHEET
+================================================================================
+
+Generate self-signed cert:
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ssl/private/self-signed.key \
+    -out /etc/ssl/certs/self-signed.crt \
+    -subj "/C=LK/ST=Western/L=Colombo/O=Travel/CN=13.212.50.145"
+
+Check certificate:
+  sudo openssl x509 -in /etc/ssl/certs/self-signed.crt -text -noout
+
+Test HTTPS endpoint (ignore cert warning):
+  curl -k https://13.212.50.145/docs
+
+View Nginx config:
+  sudo nano /etc/nginx/nginx.conf
+
+Test Nginx config:
+  sudo nginx -t
+
+Restart Nginx:
+  sudo systemctl restart nginx
+
+View Nginx logs:
+  sudo tail -f /var/log/nginx/error.log
+
+Test with specific host header:
+  curl -k -H "Host: 13.212.50.145" https://13.212.50.145/docs
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Issue: curl: (60) SSL: certificate problem
+Solution: Use -k flag to ignore cert warning
+         curl -k https://13.212.50.145/docs
+
+Issue: 502 Bad Gateway
+Solution: Check backend running on port 8000
+         sudo netstat -tlnp | grep 8000
+         Check logs: docker compose logs -f
+
+Issue: Connection refused
+Solution: Check ports allowed in security group (80, 443)
+         Check Nginx is running: sudo systemctl status nginx
+
+Issue: Certificate not found after openssl command
+Solution: Check permissions: sudo ls -la /etc/ssl/certs/
+         Regenerate certificate if needed
+
+Issue: Nginx won't start
+Solution: Check config: sudo nginx -t
+         View logs: sudo journalctl -u nginx -n 50
+
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+NOW (Testing Phase):
+  1. Follow OPTION 1 to create self-signed cert
+  2. Test HTTPS works: curl -k https://13.212.50.145/docs
+  3. Test API endpoints work
+  4. Update frontend to use https://13.212.50.145
+
+LATER (When domain ready):
+  1. Update DNS: api.lankapasstravel.com → 13.212.50.145
+  2. Run certbot to get trusted certificate
+  3. Update Nginx config with trusted cert
+  4. Update frontend to use api.lankapasstravel.com
+
+That's your complete HTTPS setup on EC2!
+
+================================================================================
